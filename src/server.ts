@@ -11,6 +11,9 @@ import { AnalyticsService } from './services/analytics.service';
 import { ReconciliationService } from './services/reconciliation.service';
 import { BenchmarkingService } from './services/benchmarking.service';
 import { AdSpendService } from './services/ad-spend.service';
+import { DiscountCannibalizationService } from './services/discount-cannibalization.service';
+import { DeliverabilityRadarService } from './services/deliverability-radar.service';
+import { FlowAbOptimizerService } from './services/flow-ab-optimizer.service';
 
 const server = Fastify({
   logger: {
@@ -29,13 +32,13 @@ async function startServer() {
   await server.register(billingRoutes, { prefix: '/api/v1' });
   await server.register(shopifyGdprRoutes, { prefix: '/api/v1' });
 
-  // Register Dedicated Connectors & Ingestion Webhooks
+  // Register Ingestion Webhooks
   await server.register(rechargeWebhookRoutes, { prefix: '/api/v1' });
   await server.register(smsWebhookRoutes, { prefix: '/api/v1' });
   await server.register(omnisendWebhookRoutes, { prefix: '/api/v1' });
 
   // Health check
-  server.get('/health', async () => ({ status: 'healthy', version: '1.2.0', timestamp: new Date().toISOString() }));
+  server.get('/health', async () => ({ status: 'healthy', version: '1.3.0', timestamp: new Date().toISOString() }));
 
   // Analytics Endpoints
   server.get('/api/v1/clients/:clientId/pacing', async (req: any, reply) => {
@@ -62,37 +65,45 @@ async function startServer() {
     return reply.send(report);
   });
 
-  server.get('/api/v1/clients/:clientId/benchmarks', async (req: any, reply) => {
+  // Feature 1: Discount Cannibalization & Margin Erosion
+  server.get('/api/v1/clients/:clientId/discount-cannibalization', async (req: any, reply) => {
     const { clientId } = req.params;
-    const { tenantId, metric } = req.query;
-    const benchmark = await BenchmarkingService.getPortfolioBenchmark(
-      tenantId || '00000000-0000-0000-0000-000000000001',
-      clientId,
-      metric || 'welcome_flow_conversion'
-    );
-    return reply.send(benchmark);
-  });
-
-  // Marketing Efficiency Ratio & Ad Spend Blending Endpoint
-  server.post('/api/v1/clients/:clientId/mer', async (req: any, reply) => {
-    const { clientId } = req.params;
-    const { tenantId, periodStart, periodEnd, metaSpend, googleSpend, newCustomers } = req.body;
-    const report = await AdSpendService.calculateMer(
+    const { tenantId, periodStart, periodEnd } = req.query;
+    const report = await DiscountCannibalizationService.analyzeDiscountCannibalization(
       tenantId || '00000000-0000-0000-0000-000000000001',
       clientId,
       periodStart || '2026-08-01',
-      periodEnd || '2026-08-31',
-      parseFloat(metaSpend || '0'),
-      parseFloat(googleSpend || '0'),
-      parseInt(newCustomers || '0', 10)
+      periodEnd || '2026-08-31'
     );
     return reply.send(report);
+  });
+
+  // Feature 2: Deliverability & Inbox Placement Radar
+  server.get('/api/v1/clients/:clientId/deliverability-radar', async (req: any, reply) => {
+    const { clientId } = req.params;
+    const { tenantId } = req.query;
+    const report = await DeliverabilityRadarService.checkDeliverabilityRadar(
+      tenantId || '00000000-0000-0000-0000-000000000001',
+      clientId
+    );
+    return reply.send(report);
+  });
+
+  // Feature 3: Flow A/B Test Optimizer & Waste Calculator
+  server.get('/api/v1/clients/:clientId/ab-optimizer', async (req: any, reply) => {
+    const { clientId } = req.params;
+    const { tenantId } = req.query;
+    const tests = await FlowAbOptimizerService.evaluateFlowSplitTests(
+      tenantId || '00000000-0000-0000-0000-000000000001',
+      clientId
+    );
+    return reply.send(tests);
   });
 
   const port = parseInt(process.env.PORT || '4000', 10);
   try {
     await server.listen({ port, host: '0.0.0.0' });
-    console.log(`🚀 Pulse Retention Engine API with all connectors running on port ${port}`);
+    console.log(`🚀 Pulse Retention Engine v1.3.0 running with all secret-weapon features on port ${port}`);
   } catch (err) {
     server.log.error(err);
     process.exit(1);
