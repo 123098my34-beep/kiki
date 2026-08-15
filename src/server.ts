@@ -1,5 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import fs from 'fs';
+import path from 'path';
 import { authRoutes } from './routes/auth.routes';
 import { billingRoutes } from './routes/billing.routes';
 import { shopifyGdprRoutes } from './routes/shopify-gdpr.routes';
@@ -27,6 +29,13 @@ async function startServer() {
   // Custom Domain Multi-Tenant Middleware
   server.addHook('preHandler', tenantDomainMiddleware);
 
+  // Serve the Marketing Landing Page on root
+  server.get('/', async (req, reply) => {
+    const htmlPath = path.join(__dirname, 'views', 'landing-page.html');
+    const html = fs.readFileSync(htmlPath, 'utf8');
+    reply.type('text/html').send(html);
+  });
+
   // Register Core API Routes
   await server.register(authRoutes, { prefix: '/api/v1' });
   await server.register(billingRoutes, { prefix: '/api/v1' });
@@ -38,7 +47,7 @@ async function startServer() {
   await server.register(omnisendWebhookRoutes, { prefix: '/api/v1' });
 
   // Health check
-  server.get('/health', async () => ({ status: 'healthy', version: '1.3.0', timestamp: new Date().toISOString() }));
+  server.get('/health', async () => ({ status: 'healthy', version: '1.4.0', timestamp: new Date().toISOString() }));
 
   // Analytics Endpoints
   server.get('/api/v1/clients/:clientId/pacing', async (req: any, reply) => {
@@ -100,10 +109,26 @@ async function startServer() {
     return reply.send(tests);
   });
 
+  // Marketing Efficiency Ratio & Ad Spend Blending Endpoint
+  server.post('/api/v1/clients/:clientId/mer', async (req: any, reply) => {
+    const { clientId } = req.params;
+    const { tenantId, periodStart, periodEnd, metaSpend, googleSpend, newCustomers } = req.body;
+    const report = await AdSpendService.calculateMer(
+      tenantId || '00000000-0000-0000-0000-000000000001',
+      clientId,
+      periodStart || '2026-08-01',
+      periodEnd || '2026-08-31',
+      parseFloat(metaSpend || '0'),
+      parseFloat(googleSpend || '0'),
+      parseInt(newCustomers || '0', 10)
+    );
+    return reply.send(report);
+  });
+
   const port = parseInt(process.env.PORT || '4000', 10);
   try {
     await server.listen({ port, host: '0.0.0.0' });
-    console.log(`🚀 Pulse Retention Engine v1.3.0 running with all secret-weapon features on port ${port}`);
+    console.log(`🚀 Pulse Retention Engine running with Landing Page on http://localhost:${port}`);
   } catch (err) {
     server.log.error(err);
     process.exit(1);
