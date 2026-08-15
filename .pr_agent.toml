@@ -1,0 +1,26 @@
+[config]
+model = "gpt-4o"
+fallback_models = ["gpt-4-turbo"]
+
+[pr_reviewer]
+# High-priority custom review instructions for Pulse Retention Engine
+extra_instructions = """
+You are the senior code reviewer for Pulse Retention Engine, an enterprise e-commerce retention analytics platform.
+Please strictly enforce the following architectural invariants during review:
+1. Multi-Tenant Isolation: Ensure EVERY ClickHouse query and PostgreSQL transaction explicitly filters by `tenant_id` and `client_id`. Flag any query missing tenant boundaries as a critical vulnerability.
+2. Parameterized SQL: Verify that all ClickHouse and PostgreSQL queries use strict query parameters (e.g. {tenantId:UUID}) to prevent SQL injection.
+3. OLAP Efficiency: Ensure ClickHouse queries leverage table partitioning (toYYYYMM) and primary sorting keys. Flag full-table scans.
+4. Cryptographic Safety: Ensure third-party tokens (Shopify, Klaviyo) are never logged in plain text and are always routed through CryptoService (AES-256-GCM).
+5. Rate Limiting & Backoff: Ensure any external API calls (Shopify Admin, Klaviyo API) handle 429 status codes with exponential backoff.
+"""
+enable_auto_approval = false
+require_security_review = true
+require_estimate_effort_to_review = true
+
+[pr_description]
+publish_labels = true
+use_bullet_points = true
+
+[pr_code_suggestions]
+num_code_suggestions = 5
+rank_suggestions = true

@@ -1,0 +1,52 @@
+services:
+  # 1. High-Throughput API Gateway & Ingestion Server
+  - type: web
+    name: pulse-retention-api
+    env: node
+    plan: standard
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: DATABASE_URL
+        sync: false
+      - key: CLICKHOUSE_HOST
+        sync: false
+      - key: CLICKHOUSE_USER
+        value: default
+      - key: CLICKHOUSE_PASSWORD
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: SHOPIFY_API_KEY
+        sync: false
+      - key: SHOPIFY_API_SECRET
+        sync: false
+      - key: KLAVIYO_CLIENT_ID
+        sync: false
+      - key: KLAVIYO_CLIENT_SECRET
+        sync: false
+
+  # 2. BullMQ Distributed Queue Worker Fleet
+  - type: worker
+    name: pulse-event-workers
+    env: node
+    plan: standard
+    buildCommand: npm install && npm run build
+    startCommand: node dist/workers/klaviyo-sync.worker.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: REDIS_URL
+        sync: false
+      - key: CLICKHOUSE_HOST
+        sync: false
+      - key: DATABASE_URL
+        sync: false

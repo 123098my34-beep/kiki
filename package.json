@@ -1,0 +1,31 @@
+{
+  "name": "pulse-retention-engine",
+  "version": "1.0.0",
+  "description": "Autonomous AI-native retention analytics and client-reporting platform for agencies & e-commerce brands.",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts",
+    "migrate": "ts-node src/db/migrate.ts",
+    "diagnostics": "ts-node src/scripts/verify-production-setup.ts",
+    "seed": "ts-node src/scripts/seed-demo-data.ts",
+    "setup": "bash scripts/bootstrap.sh"
+  },
+  "dependencies": {
+    "@clickhouse/client": "^1.2.0",
+    "@fastify/cors": "^9.0.1",
+    "axios": "^1.7.2",
+    "bullmq": "^5.8.5",
+    "fastify": "^4.28.1",
+    "ioredis": "^5.4.1",
+    "stripe": "^16.2.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/uuid": "^10.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.2"
+  }
+}
