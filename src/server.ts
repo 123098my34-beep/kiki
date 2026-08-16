@@ -16,6 +16,9 @@ import { AdSpendService } from './services/ad-spend.service';
 import { DiscountCannibalizationService } from './services/discount-cannibalization.service';
 import { DeliverabilityRadarService } from './services/deliverability-radar.service';
 import { FlowAbOptimizerService } from './services/flow-ab-optimizer.service';
+import { ShareableReportService } from './services/shareable-report.service';
+import { SubscriptionCohortService } from './services/subscription-cohort.service';
+import { MetaAdsService } from './services/meta-ads.service';
 
 const server = Fastify({
   logger: {
@@ -29,7 +32,7 @@ async function startServer() {
   // Custom Domain Multi-Tenant Middleware
   server.addHook('preHandler', tenantDomainMiddleware);
 
-  // Serve the Marketing Landing Page on root
+  // Serve Marketing Landing Page on root
   server.get('/', async (req, reply) => {
     const htmlPath = path.join(__dirname, 'views', 'landing-page.html');
     const html = fs.readFileSync(htmlPath, 'utf8');
@@ -47,9 +50,68 @@ async function startServer() {
   await server.register(omnisendWebhookRoutes, { prefix: '/api/v1' });
 
   // Health check
-  server.get('/health', async () => ({ status: 'healthy', version: '1.4.0', timestamp: new Date().toISOString() }));
+  server.get('/health', async () => ({ status: 'healthy', version: '1.5.0', timestamp: new Date().toISOString() }));
 
-  // Analytics Endpoints
+  // Instant Shareable Client Web Reports
+  server.post('/api/v1/clients/:clientId/share-report', async (req: any, reply) => {
+    const { clientId } = req.params;
+    const { tenantId, reportId, expiresInDays, password } = req.body;
+    const share = ShareableReportService.createShareToken(
+      tenantId || '00000000-0000-0000-0000-000000000001',
+      clientId,
+      reportId || 'rep_latest',
+      expiresInDays || 30,
+      password
+    );
+    return reply.send(share);
+  });
+
+  server.get('/r/:shareToken', async (req: any, reply) => {
+    const { shareToken } = req.params;
+    const { password } = req.query;
+    const resolution = ShareableReportService.resolveShareToken(shareToken, password);
+    if (!resolution.valid) {
+      return reply.status(403).send({ error: resolution.error });
+    }
+    return reply.type('text/html').send(`
+      <!DOCTYPE html><html><head><title>Executive Retention Briefing</title><script src="https://cdn.tailwindcss.com"></script></head>
+      <body class="bg-slate-950 text-slate-100 p-8">
+        <div class="max-w-4xl mx-auto bg-slate-900 border border-slate-800 p-8 rounded-2xl">
+          <div class="flex justify-between items-center border-b border-slate-800 pb-4 mb-6">
+            <h1 class="text-2xl font-bold">Executive Retention Report</h1>
+            <span class="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full">Active Share</span>
+          </div>
+          <p class="text-slate-400">Viewing authenticated client retention report token: <code>${shareToken}</code></p>
+        </div>
+      </body></html>
+    `);
+  });
+
+  // Subscription Cycle Drop-Off Analytics
+  server.get('/api/v1/clients/:clientId/subscription-cycles', async (req: any, reply) => {
+    const { clientId } = req.params;
+    const { tenantId } = req.query;
+    const cycles = await SubscriptionCohortService.analyzeCycleDropoff(
+      tenantId || '00000000-0000-0000-0000-000000000001',
+      clientId
+    );
+    return reply.send(cycles);
+  });
+
+  // Meta Ads Auto-Sync Trigger
+  server.post('/api/v1/clients/:clientId/meta-sync', async (req: any, reply) => {
+    const { clientId } = req.params;
+    const { tenantId, adAccountId, accessToken } = req.body;
+    const res = await MetaAdsService.syncDailyAdSpend(
+      tenantId || '00000000-0000-0000-0000-000000000001',
+      clientId,
+      adAccountId || '123456789',
+      accessToken || 'mock_token'
+    );
+    return reply.send(res);
+  });
+
+  // Core Analytics Endpoints
   server.get('/api/v1/clients/:clientId/pacing', async (req: any, reply) => {
     const { clientId } = req.params;
     const { tenantId, name, target } = req.query;
@@ -74,7 +136,6 @@ async function startServer() {
     return reply.send(report);
   });
 
-  // Feature 1: Discount Cannibalization & Margin Erosion
   server.get('/api/v1/clients/:clientId/discount-cannibalization', async (req: any, reply) => {
     const { clientId } = req.params;
     const { tenantId, periodStart, periodEnd } = req.query;
@@ -87,7 +148,6 @@ async function startServer() {
     return reply.send(report);
   });
 
-  // Feature 2: Deliverability & Inbox Placement Radar
   server.get('/api/v1/clients/:clientId/deliverability-radar', async (req: any, reply) => {
     const { clientId } = req.params;
     const { tenantId } = req.query;
@@ -98,7 +158,6 @@ async function startServer() {
     return reply.send(report);
   });
 
-  // Feature 3: Flow A/B Test Optimizer & Waste Calculator
   server.get('/api/v1/clients/:clientId/ab-optimizer', async (req: any, reply) => {
     const { clientId } = req.params;
     const { tenantId } = req.query;
@@ -109,26 +168,10 @@ async function startServer() {
     return reply.send(tests);
   });
 
-  // Marketing Efficiency Ratio & Ad Spend Blending Endpoint
-  server.post('/api/v1/clients/:clientId/mer', async (req: any, reply) => {
-    const { clientId } = req.params;
-    const { tenantId, periodStart, periodEnd, metaSpend, googleSpend, newCustomers } = req.body;
-    const report = await AdSpendService.calculateMer(
-      tenantId || '00000000-0000-0000-0000-000000000001',
-      clientId,
-      periodStart || '2026-08-01',
-      periodEnd || '2026-08-31',
-      parseFloat(metaSpend || '0'),
-      parseFloat(googleSpend || '0'),
-      parseInt(newCustomers || '0', 10)
-    );
-    return reply.send(report);
-  });
-
   const port = parseInt(process.env.PORT || '4000', 10);
   try {
     await server.listen({ port, host: '0.0.0.0' });
-    console.log(`🚀 Pulse Retention Engine running with Landing Page on http://localhost:${port}`);
+    console.log(`🚀 Pulse Retention Engine v1.5.0 running with all enhancements on port ${port}`);
   } catch (err) {
     server.log.error(err);
     process.exit(1);
