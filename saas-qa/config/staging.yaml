@@ -1,0 +1,6 @@
+base_url: "https://staging.pulseretention.io"
+api_url: "https://staging.pulseretention.io/api/v1"
+admin_email: "qa-admin@staging.pulseretention.io"
+tenant_prefix: "qa-staging"
+browser_headless: true
+timeout: "15s"

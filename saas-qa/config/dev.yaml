@@ -1,0 +1,6 @@
+base_url: "http://localhost:4000"
+api_url: "http://localhost:4000/api/v1"
+admin_email: "qa-admin@pulseretention.io"
+tenant_prefix: "qa-pulse"
+browser_headless: true
+timeout: "10s"
