@@ -10,6 +10,7 @@ import { rechargeWebhookRoutes } from './ingestion/recharge-webhook';
 import { smsWebhookRoutes } from './ingestion/sms-webhooks';
 import { omnisendWebhookRoutes } from './ingestion/omnisend-webhook';
 import { tenantDomainMiddleware } from './middleware/tenant-domain.middleware';
+import { shopifyAppBridgeMiddleware } from './middleware/shopify-app-bridge';
 import { TelemetryService } from './services/telemetry.service';
 import { AnalyticsService } from './services/analytics.service';
 import { ReconciliationService } from './services/reconciliation.service';
@@ -21,10 +22,11 @@ import { FlowAbOptimizerService } from './services/flow-ab-optimizer.service';
 import { ShareableReportService } from './services/shareable-report.service';
 import { SubscriptionCohortService } from './services/subscription-cohort.service';
 import { MetaAdsService } from './services/meta-ads.service';
+import { SseService } from './services/sse.service';
+import { FxRatesService } from './services/fx-rates.service';
+import { LlmNarrativeService } from './services/llm-narrative.service';
 
-const server = Fastify({
-  logger: false // TelemetryService handles structured JSON logs
-});
+const server = Fastify({ logger: false });
 
 async function startServer() {
   await server.register(cors, { origin: true });
@@ -36,14 +38,45 @@ async function startServer() {
     reply.header('x-trace-id', traceCtx.traceId);
   });
 
-  // 2. Custom Domain Multi-Tenant Middleware
+  // 2. Custom Domain & Shopify App Bridge Middleware
   server.addHook('preHandler', tenantDomainMiddleware);
+  server.addHook('preHandler', shopifyAppBridgeMiddleware);
 
   // Serve Marketing Landing Page on root
   server.get('/', async (req, reply) => {
     const htmlPath = path.join(__dirname, 'views', 'landing-page.html');
     const html = fs.readFileSync(htmlPath, 'utf8');
     reply.type('text/html').send(html);
+  });
+
+  // Server-Sent Events (SSE) Real-Time Data Stream
+  server.get('/api/v1/stream/events/:tenantId', async (req: any, reply) => {
+    const { tenantId } = req.params;
+    const clientId = (req.query as any)?.clientId || 'stream_client';
+    SseService.registerClient(tenantId, clientId, reply);
+  });
+
+  // Multi-Currency FX Rates Endpoint
+  server.get('/api/v1/fx-rates', async (req, reply) => {
+    return reply.send(FxRatesService.getRateMatrix());
+  });
+
+  // Structured LLM Executive Briefing Endpoint
+  server.get('/api/v1/clients/:clientId/ai-briefing', async (req: any, reply) => {
+    const { clientId } = req.params;
+    const { tenantId, target } = req.query;
+    const pacing = await AnalyticsService.calculateClientPacing(
+      tenantId || '00000000-0000-0000-0000-000000000001',
+      clientId,
+      'Client Store',
+      parseFloat(target || '100000')
+    );
+    const flows = await AnalyticsService.detectFlowDecay(
+      tenantId || '00000000-0000-0000-0000-000000000001',
+      clientId
+    );
+    const briefing = await LlmNarrativeService.generateStructuredBriefing(pacing, flows);
+    return reply.send(briefing);
   });
 
   // Register Core API Routes
@@ -58,7 +91,7 @@ async function startServer() {
   await server.register(omnisendWebhookRoutes, { prefix: '/api/v1' });
 
   // Health check
-  server.get('/health', async () => ({ status: 'healthy', version: '2.0.0', timestamp: new Date().toISOString() }));
+  server.get('/health', async () => ({ status: 'healthy', version: '2.5.0', timestamp: new Date().toISOString() }));
 
   // Instant Shareable Client Web Reports
   server.post('/api/v1/clients/:clientId/share-report', async (req: any, reply) => {
@@ -98,12 +131,13 @@ async function startServer() {
   // Analytics Endpoints
   server.get('/api/v1/clients/:clientId/pacing', async (req: any, reply) => {
     const { clientId } = req.params;
-    const { tenantId, name, target } = req.query;
+    const { tenantId, name, target, timezone } = req.query;
     const pacing = await AnalyticsService.calculateClientPacing(
       tenantId || '00000000-0000-0000-0000-000000000001',
       clientId,
       name || 'Client Store',
-      parseFloat(target || '100000')
+      parseFloat(target || '100000'),
+      timezone || 'UTC'
     );
     return reply.send(pacing);
   });
@@ -192,7 +226,7 @@ async function startServer() {
   const port = parseInt(process.env.PORT || '4000', 10);
   try {
     await server.listen({ port, host: '0.0.0.0' });
-    console.log(`🚀 Pulse Retention Engine v2.0 (Hardened & Telemetry Enabled) running on port ${port}`);
+    console.log(`🚀 Pulse Retention Engine v2.5.0 (Fully Enterprise Hardened) running on port ${port}`);
   } catch (err) {
     console.error(err);
     process.exit(1);
