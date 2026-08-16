@@ -1,0 +1,80 @@
+{
+  "project": {
+    "name": "Pulse Retention Engine SaaS",
+    "code": "PULSE",
+    "description": "Autonomous AI-Native Retention Analytics & Client Reporting Platform"
+  },
+  "suites": [
+    {
+      "title": "Ingestion & Webhooks Pipeline",
+      "cases": [
+        {
+          "title": "Shopify Webhook Ingestion & HMAC Verification",
+          "description": "Verifies that incoming orders/create webhooks are validated with sha256 HMAC and deduplicated in Redis via 24h TTL idempotency.",
+          "severity": "critical",
+          "behavior": "positive",
+          "preconditions": "Fastify server running, Redis connected.",
+          "steps": [
+            { "action": "Send POST /api/v1/webhooks/shopify/:tenantId/:clientId with valid HMAC header", "expected_result": "Status 200 { status: 'queued' }" },
+            { "action": "Re-send same webhook within 24h", "expected_result": "Status 200 { status: 'ignored_duplicate' }" }
+          ]
+        },
+        {
+          "title": "Recharge Subscription Isolation",
+          "description": "Verifies that recurring subscription charges are flagged with is_subscription: true.",
+          "severity": "major",
+          "behavior": "positive",
+          "steps": [
+            { "action": "Send charge/paid webhook from Recharge", "expected_result": "Event normalized into ClickHouse with channel: 'subscription' and is_subscription: 1" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "True Financial Reconciliation & Analytics",
+      "cases": [
+        {
+          "title": "True Contribution Margin vs. Gross ESP Claims",
+          "description": "Verifies that refunds, discounts, and subscription renewals are deducted from ESP claims.",
+          "severity": "critical",
+          "behavior": "positive",
+          "steps": [
+            { "action": "Execute ReconciliationService.getReconciliation()", "expected_result": "discrepancyPercentage and netContributionMargin correctly isolated from raw gross" }
+          ]
+        },
+        {
+          "title": "Flow Decay Anomaly Detection (Z-Score < -1.8)",
+          "description": "Verifies that automations experiencing CTR or RPR drop beyond 1.8 sigma trigger decay alerts.",
+          "severity": "major",
+          "behavior": "positive",
+          "steps": [
+            { "action": "Run AnalyticsService.detectFlowDecay() on 14-day rolling window", "expected_result": "Decaying flows flagged with recommendedAction" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Customer Retention & GTM Modules",
+      "cases": [
+        {
+          "title": "Discount Cannibalization Margin Loss",
+          "description": "Verifies that unneeded discounts given to organic high-intent buyers are accurately estimated.",
+          "severity": "major",
+          "behavior": "positive"
+        },
+        {
+          "title": "Deliverability Radar Apple MPP Filtering",
+          "description": "Verifies that Apple Mail Privacy ghost opens are subtracted from raw open rates.",
+          "severity": "major",
+          "behavior": "positive"
+        },
+        {
+          "title": "Stripe Multi-Tenant Tier Enforcement",
+          "description": "Verifies that Starter, Growth, and Scale plans enforce store and event allowances.",
+          "severity": "critical",
+          "behavior": "positive"
+        }
+      ]
+    }
+  ]
+}

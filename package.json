@@ -10,7 +10,8 @@
     "migrate": "ts-node src/db/migrate.ts",
     "diagnostics": "ts-node src/scripts/verify-production-setup.ts",
     "seed": "ts-node src/scripts/seed-demo-data.ts",
-    "setup": "bash scripts/bootstrap.sh"
+    "setup": "bash scripts/bootstrap.sh",
+    "test": "ts-node src/tests/test-suite.runner.ts"
   },
   "dependencies": {
     "@clickhouse/client": "^1.2.0",
