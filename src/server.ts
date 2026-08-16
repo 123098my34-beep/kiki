@@ -5,10 +5,12 @@ import path from 'path';
 import { authRoutes } from './routes/auth.routes';
 import { billingRoutes } from './routes/billing.routes';
 import { shopifyGdprRoutes } from './routes/shopify-gdpr.routes';
+import { healthRoutes } from './routes/health.routes';
 import { rechargeWebhookRoutes } from './ingestion/recharge-webhook';
 import { smsWebhookRoutes } from './ingestion/sms-webhooks';
 import { omnisendWebhookRoutes } from './ingestion/omnisend-webhook';
 import { tenantDomainMiddleware } from './middleware/tenant-domain.middleware';
+import { TelemetryService } from './services/telemetry.service';
 import { AnalyticsService } from './services/analytics.service';
 import { ReconciliationService } from './services/reconciliation.service';
 import { BenchmarkingService } from './services/benchmarking.service';
@@ -21,15 +23,20 @@ import { SubscriptionCohortService } from './services/subscription-cohort.servic
 import { MetaAdsService } from './services/meta-ads.service';
 
 const server = Fastify({
-  logger: {
-    level: process.env.LOG_LEVEL || 'info',
-  }
+  logger: false // TelemetryService handles structured JSON logs
 });
 
 async function startServer() {
   await server.register(cors, { origin: true });
 
-  // Custom Domain Multi-Tenant Middleware
+  // 1. OpenTelemetry Distributed Tracing Pre-Handler Hook
+  server.addHook('preHandler', async (req, reply) => {
+    const traceCtx = TelemetryService.extractOrCreateTrace(req);
+    (req as any).trace = traceCtx;
+    reply.header('x-trace-id', traceCtx.traceId);
+  });
+
+  // 2. Custom Domain Multi-Tenant Middleware
   server.addHook('preHandler', tenantDomainMiddleware);
 
   // Serve Marketing Landing Page on root
@@ -43,6 +50,7 @@ async function startServer() {
   await server.register(authRoutes, { prefix: '/api/v1' });
   await server.register(billingRoutes, { prefix: '/api/v1' });
   await server.register(shopifyGdprRoutes, { prefix: '/api/v1' });
+  await server.register(healthRoutes, { prefix: '/api/v1' });
 
   // Register Ingestion Webhooks
   await server.register(rechargeWebhookRoutes, { prefix: '/api/v1' });
@@ -50,7 +58,7 @@ async function startServer() {
   await server.register(omnisendWebhookRoutes, { prefix: '/api/v1' });
 
   // Health check
-  server.get('/health', async () => ({ status: 'healthy', version: '1.5.0', timestamp: new Date().toISOString() }));
+  server.get('/health', async () => ({ status: 'healthy', version: '2.0.0', timestamp: new Date().toISOString() }));
 
   // Instant Shareable Client Web Reports
   server.post('/api/v1/clients/:clientId/share-report', async (req: any, reply) => {
@@ -87,31 +95,7 @@ async function startServer() {
     `);
   });
 
-  // Subscription Cycle Drop-Off Analytics
-  server.get('/api/v1/clients/:clientId/subscription-cycles', async (req: any, reply) => {
-    const { clientId } = req.params;
-    const { tenantId } = req.query;
-    const cycles = await SubscriptionCohortService.analyzeCycleDropoff(
-      tenantId || '00000000-0000-0000-0000-000000000001',
-      clientId
-    );
-    return reply.send(cycles);
-  });
-
-  // Meta Ads Auto-Sync Trigger
-  server.post('/api/v1/clients/:clientId/meta-sync', async (req: any, reply) => {
-    const { clientId } = req.params;
-    const { tenantId, adAccountId, accessToken } = req.body;
-    const res = await MetaAdsService.syncDailyAdSpend(
-      tenantId || '00000000-0000-0000-0000-000000000001',
-      clientId,
-      adAccountId || '123456789',
-      accessToken || 'mock_token'
-    );
-    return reply.send(res);
-  });
-
-  // Core Analytics Endpoints
+  // Analytics Endpoints
   server.get('/api/v1/clients/:clientId/pacing', async (req: any, reply) => {
     const { clientId } = req.params;
     const { tenantId, name, target } = req.query;
@@ -168,12 +152,49 @@ async function startServer() {
     return reply.send(tests);
   });
 
+  server.get('/api/v1/clients/:clientId/subscription-cycles', async (req: any, reply) => {
+    const { clientId } = req.params;
+    const { tenantId } = req.query;
+    const cycles = await SubscriptionCohortService.analyzeCycleDropoff(
+      tenantId || '00000000-0000-0000-0000-000000000001',
+      clientId
+    );
+    return reply.send(cycles);
+  });
+
+  server.post('/api/v1/clients/:clientId/meta-sync', async (req: any, reply) => {
+    const { clientId } = req.params;
+    const { tenantId, adAccountId, accessToken } = req.body;
+    const res = await MetaAdsService.syncDailyAdSpend(
+      tenantId || '00000000-0000-0000-0000-000000000001',
+      clientId,
+      adAccountId || '123456789',
+      accessToken || 'mock_token'
+    );
+    return reply.send(res);
+  });
+
+  server.post('/api/v1/clients/:clientId/mer', async (req: any, reply) => {
+    const { clientId } = req.params;
+    const { tenantId, periodStart, periodEnd, metaSpend, googleSpend, newCustomers } = req.body;
+    const report = await AdSpendService.calculateMer(
+      tenantId || '00000000-0000-0000-0000-000000000001',
+      clientId,
+      periodStart || '2026-08-01',
+      periodEnd || '2026-08-31',
+      parseFloat(metaSpend || '0'),
+      parseFloat(googleSpend || '0'),
+      parseInt(newCustomers || '0', 10)
+    );
+    return reply.send(report);
+  });
+
   const port = parseInt(process.env.PORT || '4000', 10);
   try {
     await server.listen({ port, host: '0.0.0.0' });
-    console.log(`🚀 Pulse Retention Engine v1.5.0 running with all enhancements on port ${port}`);
+    console.log(`🚀 Pulse Retention Engine v2.0 (Hardened & Telemetry Enabled) running on port ${port}`);
   } catch (err) {
-    server.log.error(err);
+    console.error(err);
     process.exit(1);
   }
 }
