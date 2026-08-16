@@ -4,7 +4,7 @@ services:
     name: pulse-retention-api
     env: node
     plan: standard
-    buildCommand: npm install && npm run build
+    buildCommand: npm install && npm run build && mkdir -p dist/views && cp -r src/views dist/
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -19,19 +19,13 @@ services:
         value: default
       - key: CLICKHOUSE_PASSWORD
         sync: false
+      - key: CLICKHOUSE_DB
+        value: pulse_analytics
       - key: REDIS_URL
         sync: false
       - key: ENCRYPTION_KEY
         generateValue: true
       - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: SHOPIFY_API_KEY
-        sync: false
-      - key: SHOPIFY_API_SECRET
-        sync: false
-      - key: KLAVIYO_CLIENT_ID
-        sync: false
-      - key: KLAVIYO_CLIENT_SECRET
         sync: false
 
   # 2. BullMQ Distributed Queue Worker Fleet
