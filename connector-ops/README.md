@@ -18,5 +18,7 @@ Operating kit for the first connector lane, built on the doctrine in [`skills/co
 | `campaigns.md` | The 40-message campaign: sequences + exact copy |
 | `tracker.csv` | Deal tracker (import to any spreadsheet/Notion) |
 | `playbook.md` | Daily loop, pricing, invoicing, objections |
+| `oss-stack.md` | Self-hosted open-source stack (Mailcow + Listmonk + Invoice Ninja) replacing paid tools |
+| `tracker.csv` | Deal tracker (import to any spreadsheet/Notion) |
 
 **Status:** prep complete. NOTHING has been sent. Sending requires the manual provisions listed in `playbook.md` §6.
