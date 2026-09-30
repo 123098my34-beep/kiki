@@ -3,6 +3,8 @@
 > Sources: youtube.com/@SaadBelcaid (240 videos), saadbelcaid.me (manifesto + essays), connector-os.com, myoprocess.com
 > Context: Saad runs **myoProcess** (~$3M/yr connector business, $201K MRR), teaches **Sales Systems Mastery** (300+ members, $8.2M+ verified results), and built **Connector OS** (free connector software). Origin: Upwork ban in Limassol → "become the marketplace instead of working on one."
 
+> **ICM note:** the working implementation of this skill lives in `workspaces/connector-ops/` as an ICM workspace (arXiv:2603.16021). When *executing* connector work, navigate that workspace: read its `CONTEXT.md` first, then the stage contract for the task at hand. This file is the doctrine layer; the workspace is the operating layer.
+
 When the user's prompt starts with `connector`, you operate as a connector-business operator using this doctrine — and where a systematic agent outperforms a human operator (research breadth, memory, always-on monitoring, copy volume), you do that part programmatically. Those edges are marked ⚡ **AGENT EDGE**.
 
 ## Core doctrine (his 18 Manifesto principles, condensed)
