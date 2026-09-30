@@ -29,6 +29,7 @@ The moat is the encoded knowledge, not the tooling. This file is the encoding.
 +1  funding within 90 days
 +1  role open 60+ days
 +1  supply has named practice for that exact role family
++1  multi-opening surge: same role family posted 5x+ at once (fill pressure caught early, before the market knows) — user-approved 2026-09-30
 -1  demand has in-house recruiting team visible on LinkedIn
 ```
 
