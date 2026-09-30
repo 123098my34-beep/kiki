@@ -3,7 +3,7 @@
 An **ICM workspace** (Interpretable Context Methodology — Van Clief & McDermott, [arXiv:2603.16021](https://arxiv.org/abs/2603.16021)): folder structure as agent architecture. No orchestration framework — the numbered folders are the pipeline, markdown files are the control plane, and one agent reads the right files at the right moment.
 
 **Lane (X connects to Y):** *freshly-funded AI & cybersecurity startups ↔ specialist AI/cyber recruiting firms.*
-The connector motion encoded below: **Signal → Match → Route → Print** (doctrine: `skills/connector/SKILL.md`).
+The connector motion encoded below: **Signal → Match → Route → Print** (doctrine: `skills/icm/connector/SKILL.md`).
 
 ## Folder map (what everything is)
 
@@ -50,7 +50,7 @@ Sequential (stage N reads stage N−1's output), reviewable (sending/intro/invoi
 | 0 | root `AGENTS.md` + this README | "Where am I?" | always loaded |
 | 1 | `CONTEXT.md` | "Where do I go?" | ~40 lines |
 | 2 | `stages/0N-*/CONTEXT.md` | "What do I do?" | 30–60 lines each |
-| 3 | `_config/*`, `references/*`, `skills/connector/SKILL.md` | "What rules apply?" | loaded per Inputs table |
+| 3 | `_config/*`, `references/*`, `skills/icm/connector/SKILL.md` | "What rules apply?" | loaded per Inputs table |
 | 4 | `stages/*/output/*`, `tracker.csv` | "What am I working with?" | changes every run |
 
 One-way references only: stages → `_config/` + earlier stages. Nothing points forward. `tracker.csv` is the single canonical state; `output/` folders are per-run artifacts.

@@ -7,10 +7,11 @@ This repository is organized according to the **Interpretable Context Methodolog
 ```
 AGENTS.md                       # agent activation rules + ICM architecture rules (Layer 0)
 skills/                         # Layer 3: keyword-activated domain skills (ICM Pattern 9)
-├── hrm/SKILL.md                #   'hrm'  → Hierarchical Reasoning Model
-├── azr/SKILL.md                #   'azr'  → Absolute Zero Reasoner
-├── connector/SKILL.md          #   'connector' → Belcaid deal-flow doctrine
-└── icm/SKILL.md                #   ICM methodology reference itself
+└── icm/                        #   all skills nested under the ICM folder
+    ├── SKILL.md                #   'icm' → ICM methodology reference itself
+    ├── hrm/SKILL.md            #   'hrm'  → Hierarchical Reasoning Model
+    ├── azr/SKILL.md            #   'azr'  → Absolute Zero Reasoner
+    └── connector/SKILL.md      #   'connector' → Belcaid deal-flow doctrine
 workspaces/                     # operational pipelines (numbered stages = execution order)
 └── connector-ops/              # reference implementation: connector business as a 5-stage ICM pipeline
 ```
