@@ -42,3 +42,20 @@ Fallbacks (encoded, in case a pick rots): Mautic (heavier campaigns), InvoiceShe
 - Warmup discipline (now manual — calendar it)
 - Contact enrichment + careers-page verification
 - Send approval, closing calls
+
+## Free enrichment tools (user decision 2026-09-30: no paid enrichment — Apollo/Hunter PAID tiers are OUT; free tiers only as listed)
+
+Doctrine check: "the encoded market knowledge is the moat, not the software" — free tools don't weaken the edge; the tracker is the moat.
+
+| Job | Free tool | How | Cap |
+|---|---|---|---|
+| Email lookup/verify | **Hunter.io free tier** | 25 searches + 50 verifications/mo on each target domain | 25/50 per month |
+| Email lookup (backup) | **Apollo.io free plan** | ~$0 free credits/mo of email credits — use only where Hunter's cap runs out | small monthly credit pool |
+| Email guess-check | **MX + catch-all check** (free): `dig MX <domain>` + `dig <guess>.<domain>` | Confirms the domain accepts mail before trusting a pattern guess | unlimited, from terminal |
+| Manual check | **LinkedIn** (manual, free) | Name/title confirmation on profiles we cite in the log | unlimited, manual |
+| Decision-maker discovery | **The.Name spreadsheets on company team pages + LinkedIn people-search** | Already proven: Talentfoot self-publishes the email; Recruits Lab/KORE1/Blue Signal all name founders on their sites | free |
+| SMTP-level verify (optional, later) | **Self-host: catch-all + RCPT test** via the Mailcow box | Only for the handful of contacts that matter before an intro — send nothing, just probe | free, self-hosted |
+
+**Order of use for our 8 named contacts:** company team page first (found Talentfoot this way) → LinkedIn → Hunter free searches → MX check on the pattern guess → log confidence in the enrichment log. If a contact can't be verified free, it stays UNVERIFIED — no paid fallback by user decision.
+
+**Discipline rule:** one lookup per domain per tool per month. Wasting free-tier searches on pattern guesses before checking the team page burns the whole cap — team pages and LinkedIn are unlimited, tools are not.
