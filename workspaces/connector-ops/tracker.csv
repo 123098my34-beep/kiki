@@ -21,3 +21,5 @@ id,date_added,side,company,contact_name,contact_title,email,signal,round,role_fa
 20,2026-09-30,supply,MSH Talent,,,,,,ml,,new,,find BD contact,,,,,
 21,2026-09-30,demand,Volta Infrastructure,,,,,$300M seed+A @ $2.4B Aug 2026 a16z+Altimeter,platform/infra,3,new,AZR round-2 sweep 2026-09-30,verify role open 60+ days,,,,,
 22,2026-09-30,demand,Resolve AI,,,,,$125M Series A @ $1B Feb 2026,infra-security/research eng,2,new,AZR round-2 sweep 2026-09-30,verify role open 60+ days,,,,,
+23,2026-09-30,demand,Qevlar AI,,,,,$30M Series A Mar 2026 Partech+Forgepoint,cyber eng,2,new,HRM round-3 sweep 2026-09-30,verify role open 60+ days,,,,,
+24,2026-09-30,demand,Escape,,,,,$18M Series A Mar 2026 Balderton,appsec/offsec,2,new,HRM round-3 sweep 2026-09-30,verify role open 60+ days,,,,,

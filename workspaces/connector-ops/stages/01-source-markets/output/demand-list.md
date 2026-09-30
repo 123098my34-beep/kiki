@@ -38,3 +38,20 @@
 - **Alex** ($17M Series A, Sept 29, 2026): AI agent platform *for staffing* — role conflict (it is adjacent to the supply side, not demand for recruiters). Excluded per match filters.
 
 **AZR loop note for next run:** the highest-yield proposal space found this sweep = "emerged-from-stealth infra rounds co-led by a16z/Altimeter inside 90 days" — Volta was the only survivor at score ≥3. Next sweep should propose from: (a) the 19-company leadmagic Series-A cyber list (bulk, cheap to solve), (b) Crunchbase weekly $100M+ round digests, (c) freshly announced Technical-Recruiter job posts (a company hiring recruiters is about to scale hiring — leading indicator).
+
+---
+
+## Round 3 — HRM-sourced batch (2026-09-30)
+
+> Executed (per `hrm` trigger) as an HRM hierarchy over proposal space (a) from the Round-2 note: **H-module** planned abstractly (cohort extraction → per-candidate evidence targets: round amount/date/leads + live careers page → score with market-map rubric); **L-module** ran rapid verification passes (web sweeps, primary-source reads); **Q-halting** stopped each candidate the moment evidence converged — no extra cycles burned on converged rows.
+
+| # | Company | Signal (why now) | Likely roles to probe | Score | Verify | Source (date) |
+|---|---|---|---|---|---|---|
+| 13 | Qevlar AI | **$30M Series A, Mar 10 2026** (Partech + Forgepoint co-led, EQT joining); autonomous AI SOC platform, Paris; careers live — "hiring across engineering, research, design, GTM"; fresh BDR-USA post Sep 2 2026; publishes on SOC hiring pain (engagement with the exact problem we route for) | Cyber eng, SOC/research eng | **2** | ✅ round + careers | qevlar.com/press (Mar 10, 2026); Partech/Forgepoint posts; qevlar.com/careers + teamtailor ATS (checked Sep 30, 2026) |
+| 14 | Escape | **$18M Series A, Mar 2026, Balderton-led**; AI offensive-security/AppSec platform, Paris (YC W23); **18 roles open** incl. Security Engineer, Security Architect, Data Engineer — and a **Technical Recruiter** post = about to scale hiring (leading indicator) | AppSec/offsec eng, security eng | **2** | ✅ round + careers | balderton.com/news + escape.tech LinkedIn (Mar 2026); jobs.ashbyhq.com/Escape + Scoutify count (checked Sep 30, 2026) |
+
+**Scoring per `_config/market-map.md` (route at ≥4):** both +2 (live cyber demand), 0 on the 90-day funding window (rounds ~6.5 months old — the leadmagic cohort is largely Q1 2026). Path to 4 for each: 60+ days-open role probe (daily loop §1) or a named-practice supply match.
+
+**Parked proposals (not yet solved — inventory for the next cycle):** Reclaim Security, Fig Security, Gambit Security, Astelia, Copla (all on the leadmagic Series-A cyber cohort; round + careers unverified). Venice Security stays parked from Round 2.
+
+**HRM note for next run:** the Q-halting pattern worked — both cycles converged in 2 L-passes per candidate (funding sweep → careers sweep). Next efficiency gain: batch-propose from the parked list and halt on any candidate whose round is NOT within 12 months, before burning a careers pass.
