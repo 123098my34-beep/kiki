@@ -4,9 +4,9 @@ Keyword-activated skills live in `skills/`. Check the user's prompt at the start
 
 | Prompt starts with | Skill file | Domain |
 |---|---|---|
-| `hrm` (e.g. `hrm ...`, `hrm: ...`) | `skills/hrm.md` | Hierarchical Reasoning Model — sapientinc/HRM |
-| `azr` (e.g. `azr ...`, `azr: ...`) | `skills/azr.md` | Absolute Zero Reasoner — LeapLabTHU/Absolute-Zero-Reasoner |
-| `connector` (e.g. `connector ...`, `connector: ...`) | `skills/connector.md` | Connector/deal-flow business model — Saad Belcaid (myoProcess, Connector OS) |
+| `hrm` (e.g. `hrm ...`, `hrm: ...`) | `skills/hrm/SKILL.md` | Hierarchical Reasoning Model — sapientinc/HRM |
+| `azr` (e.g. `azr ...`, `azr: ...`) | `skills/azr/SKILL.md` | Absolute Zero Reasoner — LeapLabTHU/Absolute-Zero-Reasoner |
+| `connector` (e.g. `connector ...`, `connector: ...`) | `skills/connector/SKILL.md` | Connector/deal-flow business model — Saad Belcaid (myoProcess, Connector OS) |
 
 ## Activation rules
 
@@ -15,3 +15,18 @@ Keyword-activated skills live in `skills/`. Check the user's prompt at the start
 - If the request falls outside the skill's scope, still apply the skill where relevant and answer the rest normally.
 - No trigger keyword → behave normally, do not load any skill.
 - `hrm` inside a sentence that does not start the prompt (e.g. "fix the hrm bug later") still counts as a match since the prompt starts with it — but a prompt that merely *mentions* HRM mid-sentence does not activate the skill.
+
+# Repository architecture — ICM (Interpretable Context Methodology)
+
+This repo follows **ICM** (Van Clief & McDermott, [arXiv:2603.16021](https://arxiv.org/abs/2603.16021)): *folder structure as agent architecture*. All operational work is organized as ICM workspaces under `workspaces/`.
+
+## Rules for any agent working in this repo
+
+1. **Navigate, don't memorize.** In a workspace, read its `CONTEXT.md` (Layer 1) first, then the specific stage's `CONTEXT.md` (Layer 2). Load only what the stage's Inputs table names — layers 3/4 are loaded selectively, never wholesale. Fewer irrelevant tokens = better output.
+2. **Stage numbering is execution order.** `stages/01-* → 02-* → …`; each stage reads the previous stage's `output/` and writes its own. One stage, one job — never merge stages' responsibilities.
+3. **Every output is an edit surface.** A human may edit any file in a stage's `output/` before the next stage runs; the next stage consumes the edited version. Respect what the human left there.
+4. **Canonical sources.** Every piece of information has one home (`_config/`, `references/`). Stages point to it; never duplicate rules into stage files. One-way references only — nothing references forward or circularly.
+5. **Reference vs working context.** Layer 3 (`_config/`, `references/`, `skills/`) = stable constraints to internalize. Layer 4 (`output/`, per-run artifacts) = input to process. Don't mix them.
+6. **Human gates are non-negotiable.** Where a stage contract declares a Checkpoint (e.g. sending outreach, routing an intro, issuing an invoice), stop and get user approval. Reputation work is never autonomous.
+7. **Triggers:** `status` (in a workspace) renders the pipeline state by scanning `stages/*/output/`; `setup` (in a workspace) runs its `setup/QUESTIONNAIRE.md` once and bakes answers into the config files.
+8. **New repeatable workflows become new workspaces** under `workspaces/`, built stage-by-stage following `stages/` conventions above — not as loose folders at the repo root.
