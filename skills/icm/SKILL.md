@@ -38,4 +38,4 @@ Folders/files `lowercase-with-hyphens` · stages zero-padded `01-` · placeholde
 
 ## In this repository
 
-This repo itself follows ICM: operational work lives in `workspaces/<name>/` (see root `AGENTS.md` architecture rules). Skills live in `skills/<name>/SKILL.md` (Layer 3 domain knowledge, bundled per ICM Pattern 9). The `connector-ops` workspace is the reference implementation of the methodology applied to the connector business.
+This repo itself follows ICM: operational work lives in `workspaces/<name>/` (see root `AGENTS.md` architecture rules). Skills live in `skills/icm/` — the ICM skill folder is the umbrella: `skills/icm/SKILL.md` (this file) plus domain skills bundled beneath it at `skills/icm/<name>/SKILL.md` (currently `hrm`, `azr`, `connector`) — Layer 3 domain knowledge per ICM Pattern 9. The `connector-ops` workspace is the reference implementation of the methodology applied to the connector business.
