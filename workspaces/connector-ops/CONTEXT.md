@@ -7,7 +7,7 @@
 
 | Task | Go to | Notes |
 |---|---|---|
-| Understand the business model / doctrine | `skills/connector/SKILL.md` | Load only when the user's prompt starts with `connector` (see root `AGENTS.md`) |
+| Understand the business model / doctrine | `skills/icm/connector/SKILL.md` | Load only when the user's prompt starts with `connector` (see root `AGENTS.md`) |
 | Find or verify demand & supply targets | `stages/01-source-markets/` | Stage contract inside |
 | Add contact names + emails to lists | `stages/02-enrich-contacts/` | Stage contract inside |
 | Send campaign messages / handle replies | `stages/03-run-campaigns/` | Exact copy in `references/campaign-sequences.md` |

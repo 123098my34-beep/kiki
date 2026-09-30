@@ -1,6 +1,6 @@
 # intro-template.md — Clean Intro Forge (Layer 3, stage 04 reference)
 
-Canonical intro copy per doctrine (skills/connector/SKILL.md). <120 words, reply-all, one thread. Variables filled per run from stage 03/04 outputs; structure never altered.
+Canonical intro copy per doctrine (skills/icm/connector/SKILL.md). <120 words, reply-all, one thread. Variables filled per run from stage 03/04 outputs; structure never altered.
 
 ---
 
