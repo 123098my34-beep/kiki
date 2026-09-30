@@ -7,6 +7,7 @@ Keyword-activated skills live in `skills/`. Check the user's prompt at the start
 | `hrm` (e.g. `hrm ...`, `hrm: ...`) | `skills/hrm/SKILL.md` | Hierarchical Reasoning Model — sapientinc/HRM |
 | `azr` (e.g. `azr ...`, `azr: ...`) | `skills/azr/SKILL.md` | Absolute Zero Reasoner — LeapLabTHU/Absolute-Zero-Reasoner |
 | `connector` (e.g. `connector ...`, `connector: ...`) | `skills/connector/SKILL.md` | Connector/deal-flow business model — Saad Belcaid (myoProcess, Connector OS) |
+| `icm` (e.g. `icm ...`, `icm: ...`) | `skills/icm/SKILL.md` | Interpretable Context Methodology — Van Clief & McDermott (arXiv:2603.16021) |
 
 ## Activation rules
 
