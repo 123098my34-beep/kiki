@@ -19,3 +19,5 @@ id,date_added,side,company,contact_name,contact_title,email,signal,round,role_fa
 18,2026-09-30,supply,Christian & Timbers,,,,,,exec,,new,,find BD contact,,,,,
 19,2026-09-30,supply,Tecla,,,,,,ml,,new,,find BD contact,,,,,
 20,2026-09-30,supply,MSH Talent,,,,,,ml,,new,,find BD contact,,,,,
+21,2026-09-30,demand,Volta Infrastructure,,,,,$300M seed+A @ $2.4B Aug 2026 a16z+Altimeter,platform/infra,3,new,AZR round-2 sweep 2026-09-30,verify role open 60+ days,,,,,
+22,2026-09-30,demand,Resolve AI,,,,,$125M Series A @ $1B Feb 2026,infra-security/research eng,2,new,AZR round-2 sweep 2026-09-30,verify role open 60+ days,,,,,
