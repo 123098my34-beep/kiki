@@ -41,6 +41,15 @@ export interface ToolField {
 
 export type OptionSchema = "merge-order" | "sign" | "compare" | "organize" | ToolField[] | null;
 
+/** ids of tools the FastAPI server tier can execute (see api/main.py) */
+export const CLOUD_TOOLS = new Set([
+  "merge", "rotate", "delete-pages", "reverse", "extract-pages", "n-up",
+  "resize-a4", "crop", "compress", "grayscale", "flatten", "remove-annotations",
+  "protect", "unlock", "pdf-to-jpg", "pdf-to-png", "long-image", "jpg-to-pdf",
+  "text-to-pdf", "page-numbers", "watermark", "header-footer",
+  "pdf-info", "pdf-to-text", "search", "ocr",
+]);
+
 export interface ToolDef {
   id: string;
   slug: string;

@@ -1,8 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   CheckCircle2,
+  Cloud,
   Copy,
   Download,
   FileDown,
@@ -21,9 +22,10 @@ import SignaturePad from "../components/SignaturePad";
 import RedactCanvas from "../components/RedactCanvas";
 import CompareView from "../components/CompareView";
 import { Badge, btnGhost, btnPrimary, inputCls, labelCls, selectCls } from "../components/ui";
-import { toolBySlug, CATEGORY_LABELS, type ToolDef, type ToolField } from "../lib/tools";
+import { toolBySlug, CATEGORY_LABELS, CLOUD_TOOLS, type ToolDef, type ToolField } from "../lib/tools";
 import { runTool, triggerDownloadResult, type RunResult } from "../lib/runner";
-import { renderThumbs, type PageThumb } from "../lib/engine";
+import { runRemote, checkApi, toDocInfo } from "../lib/remote";
+import { renderThumbs, formatBytes, downloadBytes, type PageThumb } from "../lib/engine";
 
 type Values = Record<string, string | number | boolean>;
 
@@ -39,6 +41,9 @@ export default function ToolPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [tier, setTier] = useState<"local" | "cloud">("local");
+  const [apiUp, setApiUp] = useState<boolean | null>(null);
+  const [tierNote, setTierNote] = useState<string | null>(null);
 
   // special-flow state
   const [thumbs, setThumbs] = useState<PageThumb[] | null>(null);
@@ -48,6 +53,16 @@ export default function ToolPage() {
     setPct(p);
     setLabel(l);
   }, []);
+
+  // preflight the cloud engine once per tool so the toggle can show readiness
+  const cloudCapable = tool ? CLOUD_TOOLS.has(tool.id) : false;
+  useEffect(() => {
+    setTierNote(null);
+    if (tool && CLOUD_TOOLS.has(tool.id)) {
+      void checkApi().then((r) => setApiUp(r.ok));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool?.id]);
 
   if (!tool) return <NotFoundTool slug={toolSlug ?? ""} />;
 
@@ -120,16 +135,44 @@ export default function ToolPage() {
     setBusy(true);
     setError(null);
     setResult(null);
+    setTierNote(null);
     try {
-      const res = await runTool(tool, {
-        files: allFiles,
-        values,
-        signatureDataUrl: signature ?? undefined,
-        onProgress: progress,
-      });
-      setResult(res);
+      if (tier === "cloud") {
+        if (!apiUp) {
+          const probe = await checkApi();
+          setApiUp(probe.ok);
+          if (!probe.ok) throw new Error("Cloud engine unreachable — it may still be starting up. Stay on the Local engine, or retry in a moment.");
+        }
+        const remote = await runRemote(tool.id, allFiles, values);
+        if (remote.kind === "download") {
+          downloadBytes(remote.bytes, remote.name, remote.mime);
+          setResult({
+            kind: "download",
+            name: remote.name,
+            bytes: remote.bytes,
+            mime: remote.mime,
+            note: remote.savedPct !== undefined ? `Server compression saved ${remote.savedPct}% (${formatBytes(remote.before ?? 0)} → ${formatBytes(remote.after ?? 0)})` : undefined,
+          });
+        } else if (remote.kind === "text") {
+          setResult({ kind: "text", text: remote.text, downloadName: `${tool.slug}.txt` });
+        } else if (remote.kind === "info") {
+          setResult({ kind: "info", info: toDocInfo(remote.info) });
+        } else {
+          setResult({ kind: "search", hits: remote.hits });
+        }
+      } else {
+        const res = await runTool(tool, {
+          files: allFiles,
+          values,
+          signatureDataUrl: signature ?? undefined,
+          onProgress: progress,
+        });
+        setResult(res);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong.");
+      const msg = e instanceof Error ? e.message : "Something went wrong.";
+      setError(msg);
+      if (msg.includes("runs locally only")) setTier("local");
     } finally {
       setBusy(false);
     }
@@ -229,6 +272,52 @@ export default function ToolPage() {
                   </div>
                 )}
 
+                {/* processing tier toggle */}
+                {cloudCapable && (
+                  <div className="mt-6 rounded-xl border hairline bg-ink-900/60 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <span className={labelCls}>Processing engine</span>
+                        <div className="mt-1 flex gap-2">
+                          {(["local", "cloud"] as const).map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setTier(t)}
+                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-sm font-medium transition ${
+                                tier === t
+                                  ? "border-brass-400 bg-brass-400/15 text-brass-200"
+                                  : "border-paper-300/15 bg-ink-900/60 text-ink-300 hover:border-brass-400/40"
+                              }`}
+                            >
+                              {t === "local" ? <><Lock className="size-3.5" /> Local (in-browser)</> : <><Cloud className="size-3.5" /> Cloud (server)</>}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <span
+                        className={`font-mono text-[11px] uppercase tracking-widest ${
+                          apiUp === null ? "text-ink-500" : apiUp ? "text-emerald-300" : "text-amber-300"
+                        }`}
+                      >
+                        {tier === "cloud"
+                          ? apiUp === null
+                            ? "checking engine…"
+                            : apiUp
+                              ? "cloud engine ready"
+                              : "cloud engine unreachable"
+                          : "your device does the work"}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-xs leading-relaxed text-ink-400">
+                      {tier === "local"
+                        ? "Files stay in this tab — nothing is transmitted. Best for sensitive documents."
+                        : "Runs on our ephemeral server: stronger compression, rasterization-free grayscale, and faster OCR. Results are held in memory for a single download, then deleted."}
+                    </p>
+                    {tierNote && <p className="mt-2 text-xs text-amber-300">{tierNote}</p>}
+                  </div>
+                )}
+
                 {/* option fields */}
                 {tool.fields.length > 0 && (
                   <div className="mt-6 space-y-5">
@@ -267,6 +356,7 @@ export default function ToolPage() {
               <ResultView
                 result={result}
                 tool={tool}
+                tier={tier}
                 copied={copied}
                 onCopy={async () => {
                   if (result.kind === "text") {
@@ -281,9 +371,15 @@ export default function ToolPage() {
         )}
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 rounded-xl border hairline bg-ink-900/50 px-5 py-4">
-          <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-ink-400">
-            <Lock className="size-3.5 text-brass-300" /> processed on-device
-          </span>
+          {tier === "local" ? (
+            <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-ink-400">
+              <Lock className="size-3.5 text-brass-300" /> processed on-device
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-ink-400">
+              <Cloud className="size-3.5 text-forge-400" /> ephemeral cloud session · single-use download
+            </span>
+          )}
           <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-ink-400">
             <FileDown className="size-3.5 text-brass-300" /> no account needed
           </span>
@@ -398,12 +494,14 @@ function FieldInput({
 function ResultView({
   result,
   tool,
+  tier,
   copied,
   onCopy,
   onReset,
 }: {
   result: RunResult;
   tool: ToolDef;
+  tier: "local" | "cloud";
   copied: boolean;
   onCopy: () => void;
   onReset: () => void;
@@ -416,7 +514,16 @@ function ResultView({
       <h3 className="mt-4 font-serif text-xl font-bold text-paper-50">{doneTitle(result, tool)}</h3>
 
       {result.kind === "compare" ? (
-        <CompareView result={result.result} />
+        <CompareView
+          result={{
+            aName: result.result.a.name,
+            bName: result.result.b.name,
+            aPages: result.result.aPages,
+            bPages: result.result.bPages,
+            pairs: result.result.pairs,
+            verdict: result.result.verdict,
+          }}
+        />
       ) : result.kind === "info" ? (
         <InfoView info={result.info} />
       ) : result.kind === "attachments" ? (
@@ -441,9 +548,18 @@ function ResultView({
           </div>
         </>
       ) : (
-        <p className="mx-auto mt-2 max-w-md text-sm text-ink-300">
-          Processed entirely on this device — saved from a local Blob.
-        </p>
+        <>
+          <p className="mx-auto mt-2 max-w-md text-sm text-ink-300">
+            {tier === "cloud"
+              ? "Processed on the ephemeral cloud session — result fetched once, then deleted server-side."
+              : "Processed on this device — saved from a local Blob."}
+          </p>
+          {result.kind === "download" && result.note && (
+            <p className="mx-auto mt-2 max-w-md rounded-lg bg-forge-400/10 px-4 py-2 font-mono text-xs text-forge-400">
+              {result.note}
+            </p>
+          )}
+        </>
       )}
 
       {result.kind !== "compare" && result.kind !== "info" && result.kind !== "attachments" && result.kind !== "search" && (

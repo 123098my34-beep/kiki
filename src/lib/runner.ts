@@ -53,7 +53,7 @@ export interface FileResult {
 }
 
 export type RunResult =
-  | { kind: "download"; name: string; bytes: Uint8Array; mime?: string }
+  | { kind: "download"; name: string; bytes: Uint8Array; mime?: string; note?: string }
   | { kind: "zip"; name: string; files: FileResult[] }
   | { kind: "text"; text: string; downloadName: string }
   | { kind: "info"; info: Awaited<ReturnType<typeof getDocInfo>> }

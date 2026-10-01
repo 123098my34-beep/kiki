@@ -1,7 +1,13 @@
-import { CheckCircle2, TriangleAlert } from "lucide-react";
-import type { CompareResult } from "../lib/engine";
+export interface CompareViewData {
+  aName: string;
+  bName: string;
+  aPages: number;
+  bPages: number;
+  pairs: Array<{ index: number; dataUrlA: string; dataUrlB: string; diffPct: number }>;
+  verdict: "identical" | "different" | "different-lengths";
+}
 
-export default function CompareView({ result }: { result: CompareResult }) {
+export default function CompareView({ result }: { result: CompareViewData }) {
   const verdictText =
     result.verdict === "identical"
       ? "Documents render identically."
@@ -18,11 +24,6 @@ export default function CompareView({ result }: { result: CompareResult }) {
             : "bg-amber-400/10 text-amber-300"
         }`}
       >
-        {result.verdict === "identical" ? (
-          <CheckCircle2 className="size-4" />
-        ) : (
-          <TriangleAlert className="size-4" />
-        )}
         {verdictText}
       </div>
 
@@ -45,13 +46,13 @@ export default function CompareView({ result }: { result: CompareResult }) {
               <figure>
                 <img src={p.dataUrlA} alt="A" className="w-full rounded-md border hairline" />
                 <figcaption className="mt-1 truncate text-center font-mono text-[10px] text-ink-500">
-                  {result.a.name}
+                  {result.aName}
                 </figcaption>
               </figure>
               <figure>
                 <img src={p.dataUrlB} alt="B" className="w-full rounded-md border hairline" />
                 <figcaption className="mt-1 truncate text-center font-mono text-[10px] text-ink-500">
-                  {result.b.name}
+                  {result.bName}
                 </figcaption>
               </figure>
             </div>

@@ -33,9 +33,23 @@ const STACK = [
     license: "MIT",
     role: "ZIP packaging for batch results, ~8 kB and the fastest JS deflate available.",
   },
+  {
+    lib: "FastAPI + PyMuPDF (cloud tier)",
+    license: "MIT · AGPL-3.0",
+    role: "Opt-in server engine for heavy jobs — uploads validated (magic bytes, 100 MB cap) and held only as a single-use, 5-minute in-memory session.",
+  },
 ];
 
 const PAPERS = [
+  {
+    tag: "arXiv:2103.04505",
+    title: "Split Computing and Early Exiting for Deep Learning Applications: Survey and Research Challenges",
+    points: [
+      "Formalizes split computing: partition a job between a constrained client and a more capable server, deciding per operation where the work should run.",
+      "PaperForge's analogue: a hybrid architecture — every tool defaults to the in-browser engine, and the cloud tier is opt-in per job (26 of 40 tools). The split is a choice you make per task, not a forced migration to a server.",
+      "Lesson applied: data minimisation (GDPR Art. 5(1)(c)) as a design constraint — the server holds results in memory as single-use sessions with a 5-minute TTL, deleted on first download. Nothing is ever persisted.",
+    ],
+  },
   {
     tag: "arXiv:2505.03335",
     title: "Absolute Zero: Reinforced Self-play Reasoning with Zero Data",
@@ -66,15 +80,15 @@ const PAPERS = [
 const FAQ = [
   {
     q: "How can you prove nothing is uploaded?",
-    a: "Open your browser DevTools → Network tab and run any tool. You will see zero outbound requests carrying file data. The only network calls are static asset loads (the app itself) and Tesseract's one-time model download for OCR. This is verifiable by anyone — it doesn't rest on a privacy-policy promise.",
+    a: "Open your browser DevTools → Network tab and run any tool on its default Local engine. You will see zero outbound requests carrying file data — the only network calls are static asset loads (the app itself) and Tesseract's one-time model download for OCR. It is verifiable by anyone, and it doesn't rest on a privacy-policy promise. If you deliberately flip a tool to the Cloud engine, exactly that one file goes up for that one job — and the result is held only as a single-use, in-memory session (5-minute TTL, deleted on first download).",
   },
   {
     q: "Where do the processing limits come from, then?",
-    a: "From your device only: RAM and CPU. A 500 MB PDF merges if your tab can hold it. There is no artificial cap because there is no metering server to pay for.",
+    a: "From your device only: RAM and CPU. A 500 MB PDF merges if your tab can hold it. There is no artificial cap because there is no metering server to pay for. The optional cloud tier adds honest caps of its own (100 MB and a page limit per job) because servers rent for bytes — and that tier is never required.",
   },
   {
     q: "Is client-side weaker than server-side processing?",
-    a: "For these operations, no — it is strictly better for privacy and usually faster (no upload/download round trip). The one trade-off: compression rasterizes pages, so text stops being selectable in the compressed copy. Server tools that preserve text do lossy font/image surgery with big compute — we show sizes transparently instead.",
+    a: "Not for these operations — local is strictly better for privacy and usually faster (no upload/download round trip). Where servers genuinely win — searchability-preserving compression, rasterization-free grayscale, big-batch rendering — PaperForge offers them as a per-tool Cloud switch instead of a migration. The one local trade-off: compression rasterizes pages, so text stops being selectable in the compressed copy; the cloud tier's compression path preserves text and reports exact before/after sizes instead.",
   },
   {
     q: "Does it work offline?",
@@ -102,7 +116,8 @@ export default function Research() {
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink-300">
             PaperForge's architecture is a bet: that the browser has become powerful
-            enough that dedicated PDF servers are legacy infrastructure. Here is the
+            enough that most PDF work no longer needs a server — while keeping an
+            opt-in cloud tier for the jobs where one still helps. Here is the
             engineering reasoning and the open literature behind it.
           </p>
         </div>
@@ -110,7 +125,7 @@ export default function Research() {
         {/* proof strip */}
         <div className="mt-10 grid gap-4 sm:grid-cols-3">
           {[
-            { icon: WifiOff, t: "Verifiable privacy", b: "Watch the network tab: no file bytes ever leave the tab. Trust the wire, not the words." },
+            { icon: WifiOff, t: "Verifiable privacy", b: "On the default Local engine, watch the network tab: no file bytes leave the tab. The cloud tier announces itself and stores nothing." },
             { icon: Cpu, t: "WASM-class compute", b: "pdf-lib, pdf.js and Tesseract compile to WebAssembly — near-native speed inside the sandbox." },
             { icon: FileCheck2, t: "Auditable layers", b: "Engine, registry, UI: three small readable layers. Audit us in an afternoon." },
           ].map((c) => (
