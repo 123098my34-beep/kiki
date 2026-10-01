@@ -1,6 +1,6 @@
 import * as pdfjsLib from "pdfjs-dist";
-// Vite resolves the bundled worker file to a real asset URL at build time.
-// @ts-expect-error -- Vite's ?url suffix isn't in pdfjs-dist's type decls
+// Vite resolves the bundled worker file to a real asset URL at build time
+// (the ?url suffix is typed by vite/client).
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;

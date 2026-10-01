@@ -99,7 +99,9 @@ const COMPARISON: Array<{
   smallpdf: string | boolean;
   adobe: string | boolean;
 }> = [
-  { feature: "Files uploaded to a server", forge: "Never", smallpdf: true, adobe: true },
+  { feature: "Files uploaded to a server", forge: "Opt-in only", smallpdf: true, adobe: true },
+  { feature: "Default processing location", forge: "Your device", smallpdf: "Their servers", adobe: "Their servers" },
+  { feature: "Results stored server-side", forge: "Never — single-use", smallpdf: true, adobe: true },
   { feature: "Account required", forge: false, smallpdf: true, adobe: true },
   { feature: "Free daily task limit", forge: "Unlimited", smallpdf: "2 free tasks", adobe: "Trial only" },
   { feature: "File size cap", forge: "Your RAM", smallpdf: "Yes", adobe: "Yes" },
@@ -130,12 +132,12 @@ const STEPS = [
   {
     icon: ShieldCheck,
     title: "Pick a tool, drop a file",
-    body: "Files open straight from your disk into the page. Nothing is transmitted — open DevTools and watch the network tab stay silent.",
+    body: "Files open straight from your disk into the page. On the default Local engine nothing is transmitted — open DevTools and watch the network tab stay silent.",
   },
   {
     icon: Cpu,
     title: "Your CPU does the work",
-    body: "pdf-lib, pdf.js and Tesseract compile to WebAssembly and run in your browser tab. The server never sees a single byte.",
+    body: "pdf-lib, pdf.js and Tesseract compile to WebAssembly and run in your browser tab. Flip any tool to the Cloud engine for heavier jobs — a switch per job, never a requirement.",
   },
   {
     icon: Zap,
@@ -160,7 +162,7 @@ export default function Landing() {
         <div className="relative mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 sm:pb-28 sm:pt-24">
           <div className="mx-auto max-w-3xl text-center">
             <Badge>
-              <Lock className="size-3" /> 100% local · 0 uploads · $0 forever
+              <Lock className="size-3" /> Local-first · opt-in cloud · $0 forever
             </Badge>
             <h1 className="mt-6 font-serif text-4xl font-bold leading-[1.08] tracking-tight text-paper-50 sm:text-6xl">
               {TOOLS.length} PDF tools that never
@@ -169,8 +171,11 @@ export default function Landing() {
             <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-ink-300 sm:text-lg">
               Smallpdf and Adobe Acrobat upload every file you touch, then meter your
               work behind accounts and paywalls. PaperForge runs {TOOLS.length} tools — merge,
-              split, compress, OCR, e-sign, redact and more — entirely inside your
-              browser with WebAssembly. Unlimited, free, and private by physics.
+              split, compress, OCR, e-sign, redact and more — inside your
+              browser with WebAssembly by default. Unlimited, free, and private by
+              physics: nothing is uploaded unless you deliberately flip a tool to the
+              ephemeral cloud engine, and even then the result lives for one download
+              before it is deleted.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link to="/merge-pdf" className={btnPrimary}>
@@ -186,7 +191,7 @@ export default function Landing() {
 
           <div className="mx-auto mt-14 grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4">
             {[
-              { icon: Lock, k: "0", v: "bytes uploaded" },
+              { icon: Lock, k: "0", v: "uploads by default" },
               { icon: Wallet, k: "$0", v: "forever, no account" },
               { icon: InfinityIcon, k: "∞", v: "tasks & file size" },
               { icon: Zap, k: String(TOOLS.length), v: "tools, one page" },
@@ -208,8 +213,8 @@ export default function Landing() {
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <SectionHeading
             kicker="The workshop"
-            title="Every tool. Zero uploads."
-            sub={`The full Smallpdf + Acrobat surface — ${TOOLS.length} tools — rebuilt to run on your machine.`}
+            title="Every tool. Local by default."
+            sub={`The full Smallpdf + Acrobat surface — ${TOOLS.length} tools — rebuilt to run on your machine, with an opt-in cloud engine for the heaviest jobs.`}
           />
 
           {featured.length > 0 && (
@@ -240,7 +245,7 @@ export default function Landing() {
       {/* ------------------------------- how it works ----------------------------- */}
       <section className="border-t hairline bg-ink-900/40 py-20 sm:py-24">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <SectionHeading kicker="How it works" title="Three steps, zero servers" />
+          <SectionHeading kicker="How it works" title="Three steps, zero accounts" />
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {STEPS.map((s, i) => (
               <div key={s.title} className="card-ink relative rounded-2xl p-6">
