@@ -9,6 +9,7 @@ import {
   type ModelProgress,
   type ResolvedEngine,
 } from "../../src/lib/asr";
+import { accessFor } from "../../src/lib/access";
 
 /**
  * The on-device activity indicator is the load-bearing claim of Murmur, so
@@ -21,15 +22,16 @@ const start = vi.fn(async () => {});
 const stopSession = vi.fn();
 /** the handler bag DictationEngine handed to createSession on the last start() */
 let sessionHandlers: AsrHandlers = {};
+/** the options (preference, tier, model) of the last createSession call */
+let lastSessionOpts: { preference: string; tier?: string; model?: string } = {};
 
 vi.mock("../../src/lib/asr", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/lib/asr")>();
   return {
     ...actual,
-    resolveEngine: (pref: string): ResolvedEngine =>
-      pref === "local" || pref === "browser" ? (pref as ResolvedEngine) : actual.resolveEngine(pref as never),
-    createSession: (opts: { preference: string; handlers: AsrHandlers }) => {
+    createSession: (opts: { preference: string; tier?: string; model?: string; handlers: AsrHandlers }) => {
       sessionHandlers = opts.handlers;
+      lastSessionOpts = opts;
       return {
         engine: opts.preference === "local" ? "local" : "browser",
         start,
@@ -68,7 +70,15 @@ beforeEach(() => {
   start.mockClear();
   stopSession.mockClear();
   sessionHandlers = {};
+  lastSessionOpts = {};
   vi.stubGlobal("AudioContext", FakeAudioContext);
+  // The Web Speech constructor does not exist in happy-dom. Define it so the
+  // real resolveEngine sees a browser that can actually do cloud dictation —
+  // then the Pro gate (not a stub) decides who gets it.
+  Object.defineProperty(window, "webkitSpeechRecognition", {
+    configurable: true,
+    value: function FakeSpeechRecognition() {},
+  });
   Object.defineProperty(navigator, "mediaDevices", {
     configurable: true,
     value: { getUserMedia: async () => fakeStream },
@@ -77,6 +87,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  Reflect.deleteProperty(window, "webkitSpeechRecognition");
 });
 
 describe("DictationEngine — on-device activity evidence", () => {
@@ -87,6 +98,7 @@ describe("DictationEngine — on-device activity evidence", () => {
       engine: "local",
       preparing: false,
       progress: null,
+      model: "tiny",
     });
     expect(engine.isRunning).toBe(false);
   });
@@ -97,13 +109,14 @@ describe("DictationEngine — on-device activity evidence", () => {
       onEvidence: (e) => seen.push(e),
     });
 
-    await engine.start("browser");
+    await engine.start("browser", undefined, accessFor(true));
     expect(engine.isRunning).toBe(true);
     expect(seen[0]).toEqual({
       evidenced: true,
       engine: "browser",
       preparing: false,
       progress: null,
+      model: "base",
     });
 
     engine.stop();
@@ -113,6 +126,7 @@ describe("DictationEngine — on-device activity evidence", () => {
       engine: "browser",
       preparing: false,
       progress: null,
+      model: "base",
     });
   });
 
@@ -130,7 +144,7 @@ describe("DictationEngine — on-device activity evidence", () => {
 
   it("does not claim preparation when the cloud engine needs no model", async () => {
     const engine = new DictationEngine();
-    await engine.start("browser");
+    await engine.start("browser", undefined, accessFor(true));
     expect(engine.evidence.preparing).toBe(false);
     engine.stop();
   });
@@ -154,6 +168,7 @@ describe("DictationEngine — on-device activity evidence", () => {
       engine: "local",
       preparing: true,
       progress: partial,
+      model: "tiny",
     });
 
     sessionHandlers.onModelProgress?.({
@@ -206,5 +221,36 @@ describe("DictationEngine — on-device activity evidence", () => {
 describe("resolveEngine", () => {
   it("treats the offline preference as always on-device", () => {
     expect(resolveEngine("local")).toBe("local");
+    expect(resolveEngine("local", "pro")).toBe("local");
+  });
+
+  it("never hands a free caller the vendor engine, whatever it asks for", () => {
+    expect(resolveEngine("browser")).toBe("local");
+    expect(resolveEngine("auto")).toBe("local");
+  });
+});
+
+describe("Pro gating", () => {
+  it("a free session asking for the browser engine resolves to on-device", async () => {
+    const engine = new DictationEngine();
+    await engine.start("browser");
+    expect(engine.evidence.engine).toBe("local");
+    expect(lastSessionOpts.tier).toBe("free");
+    engine.stop();
+  });
+
+  it("clamps a paid model request down to tiny.en on the free tier", async () => {
+    const engine = new DictationEngine();
+    // a hand-edited localStorage / stale preference must not buy a 250 MB model
+    await engine.start("local", undefined, { ...accessFor(false), model: "small" });
+    expect(lastSessionOpts.model).toBe("tiny");
+    engine.stop();
+  });
+
+  it("gives Pro the sharper model it is paying for", async () => {
+    const engine = new DictationEngine();
+    await engine.start("local", undefined, accessFor(true, "small"));
+    expect(lastSessionOpts.model).toBe("small");
+    engine.stop();
   });
 });

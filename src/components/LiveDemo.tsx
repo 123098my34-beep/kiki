@@ -3,6 +3,8 @@ import { Mic, Square, Sparkles, Wand2, RotateCcw } from "lucide-react";
 import { DictationEngine, type DictationState, type DictationStats } from "../lib/dictation";
 import { browserSpeechAvailable } from "../lib/asr";
 import { formatOnce } from "../lib/format";
+import { accessFor } from "../lib/access";
+import { isPro } from "../lib/billing";
 
 const SAMPLE_UTTERANCE =
   "um so hey team i wanted to uh talk about the q3 roadmap new line " +
@@ -30,8 +32,15 @@ export default function LiveDemo() {
   const [formatted, setFormatted] = useState("");
   const [stats, setStats] = useState<DemoStats>({ fillers: 0, commands: [] });
   const [error, setError] = useState("");
-  const [isSample, setIsSample] = useState(false);
-  const speechOk = browserSpeechAvailable();
+const [isSample, setIsSample] = useState(false);
+const [pro, setPro] = useState(isPro());
+const speechOk = browserSpeechAvailable();
+
+  useEffect(() => {
+    const handler = () => setPro(isPro());
+    window.addEventListener("murmur:pro", handler);
+    return () => window.removeEventListener("murmur:pro", handler);
+  }, []);
 
   const stopEngine = useCallback(() => {
     engineRef.current?.stop();
@@ -65,7 +74,11 @@ export default function LiveDemo() {
       },
     });
     engineRef.current = engine;
-    await engine.start("browser");
+    // The demo runs whatever this visitor is entitled to: the vendor engine for
+    // Pro, the on-device engine (with its one-time model download) for everyone
+    // else. Asking for a Pro path from the free tier would only silently fall
+    // back anyway — better to name it in the copy below.
+    await engine.start("browser", undefined, accessFor(pro));
     if (engine.isRunning) setListening(true);
     else engineRef.current = null;
   };
@@ -126,9 +139,11 @@ export default function LiveDemo() {
         <div className="mt-5 rounded-xl border border-dashed border-white/10 bg-carbon-900/60 px-5 py-8 text-center">
           <Sparkles className="mx-auto mb-3 h-6 w-6 text-signal-500" />
           <p className="mx-auto max-w-md text-sm leading-relaxed text-fog-300">
-            {speechOk
-              ? "Hit the mic and speak messy — fillers, no punctuation, voice commands. Murmur cleans it up as you go."
-              : "This browser lacks the Web Speech API. Run the sample to see the formatting engine do its trick."}
+            {speechOk && pro
+              ? "Hit the mic and speak messy — fillers, no punctuation, voice commands. Pro runs your browser's engine, so it starts instantly."
+              : speechOk
+                ? "Hit the mic and speak messy — fillers, no punctuation, voice commands. Free users run it on-device: a one-time ~40 MB model download, then your audio never leaves the browser."
+                : "This browser lacks the Web Speech API. Run the sample to see the formatting engine do its trick."}
           </p>
         </div>
       )}

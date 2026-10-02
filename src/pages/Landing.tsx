@@ -73,9 +73,9 @@ const TRANSPARENCY = [
   },
   {
     icon: Cpu,
-    name: "Browser engine (optional)",
-    body: "Your browser's built-in speech service does the transcribing — the same one that powers phone dictation. It's a vendor cloud, not ours: we never receive your audio, but your vendor does process it.",
-    tag: "fast · online",
+    name: "Browser engine (Pro)",
+    body: "Your browser's built-in speech service does the transcribing — the same one that powers phone dictation. It's a vendor cloud, not ours: we never receive your audio, but your vendor does process it. Because audio leaves the device, this path is a Pro feature; offline is the free default.",
+    tag: "pro · fast · online",
   },
   {
     icon: Wand2,
@@ -94,7 +94,7 @@ const PIPELINE = [
   {
     icon: Cpu,
     title: "Transcribe",
-    body: "Hybrid engine: the browser's Web Speech API for instant online dictation, or Whisper-tiny running as ONNX on your device for full privacy. Your call, per session.",
+    body: "Hybrid engine: Whisper running as ONNX on your device for full privacy (free), or your browser's Web Speech API for instant online dictation (Pro). Bigger on-device models — base.en and small.en — are Pro too. Your call, per session.",
   },
   {
     icon: Wand2,
@@ -117,7 +117,7 @@ const FEATURES = [
   {
     icon: WifiOff,
     title: "Works offline",
-    body: "Download the open model once (~40 MB) and dictate on a plane, in a SCIF, on a train through a tunnel. Silence is not an error state.",
+    body: "Download the open model once (40 MB free, 80 MB or 250 MB for the sharper Pro models) and dictate on a plane, in a SCIF, on a train through a tunnel. Silence is not an error state.",
   },
   {
     icon: Wand2,
@@ -127,12 +127,12 @@ const FEATURES = [
   {
     icon: Keyboard,
     title: "Voice commands, built in",
-    body: "“new paragraph”, “comma”, “question mark”, “scratch that” — dictation that edits, not just transcribes.",
+    body: "“new paragraph”, “comma”, “question mark”, “scratch that” — dictation that edits, not just transcribes. Pro adds your own phrases: say “arrow”, get →.",
   },
   {
     icon: Cpu,
     title: "Hybrid engine",
-    body: "Speed when you're online, sovereignty when it matters. Auto mode picks the best available path and shows which one is live.",
+    body: "Speed when you're online, sovereignty when it matters. Auto mode picks the best available path and shows which one is live — and the badge tells you the truth about what is processing your audio.",
   },
   {
     icon: Download,
@@ -155,7 +155,7 @@ const COMPARE: Array<{ label: string; murmur: string; wispr: string; good?: bool
   { label: "Open-model based", murmur: "Yes (Whisper-class research)", wispr: "No" },
   {
     label: "Platforms",
-    murmur: "Web today · desktop license with Pro coming",
+    murmur: "Web today · desktop license included with Pro when it ships",
     wispr: "Mac, Windows, iOS, Android",
   },
   {
@@ -173,7 +173,7 @@ const COMPARE: Array<{ label: string; murmur: string; wispr: string; good?: bool
 const FAQ = [
   {
     q: "Is the core really free forever?",
-    a: "Yes. Murmur's web Studio, offline engine, formatting engine and voice commands are free with no account and no card — offline is the default, so privacy costs you nothing. Pro pays for itself with advanced presets, priority models and the desktop license — and funds development without ads or data.",
+    a: "Yes. Murmur's web Studio, offline engine, standard formatting engine and the built-in voice commands are free with no account and no card — offline is the default, so privacy costs you nothing. Pro adds the browser engine, the bigger Whisper models, advanced formatting presets and your own voice commands — and funds development without ads or data.",
   },
   {
     q: "How is this different from Wispr Flow?",
@@ -185,7 +185,7 @@ const FAQ = [
   },
   {
     q: "What about a desktop app?",
-    a: "It's the next milestone: the same engine wrapped in Tauri for global hotkey dictation that types into any application. Pro includes the desktop license — no second purchase.",
+    a: "It has not shipped yet, and we won't pretend otherwise: the web Studio is the complete product today. When the desktop build (global hotkey, types into any application) launches, its license is included with Pro — you will not pay a second time for it.",
   },
   {
     q: "If there are no servers, how do you charge for Pro?",
@@ -590,8 +590,8 @@ export default function Landing() {
             <ul className="mb-8 space-y-3 text-sm text-fog-300">
               {[
                 "Unlimited dictation in the Studio",
-                "Offline engine as the default — audio never leaves your device",
-                "Full formatting engine + voice commands",
+                "Offline engine as the default — Whisper tiny.en, audio never leaves your device",
+                "Standard formatting engine + the full built-in voice-command set",
                 "Raw + formatted transcript side by side",
                 "No account, no watermark, no telemetry",
               ].map((item) => (
@@ -624,9 +624,10 @@ export default function Landing() {
             <ul className="mb-8 space-y-3 text-sm text-fog-300">
               {[
                 "Everything in Free",
-                "Browser engine option for users who want lower latency",
-                "Desktop app license (macOS / Windows) when it ships",
-                "Advanced formatting presets & custom voice commands",
+                "Browser engine — lower latency when you'd rather not wait for the on-device model",
+                "Sharper on-device models: Whisper base.en & small.en (80 MB / 250 MB, one-time)",
+                "Advanced formatting presets (Concise, Meeting notes) & your own voice commands",
+                "Desktop app license for macOS & Windows — included when that build launches (not released yet)",
                 "Priority model & feature updates",
               ].map((item) => (
                 <li key={item} className="flex gap-2.5">
@@ -656,7 +657,8 @@ export default function Landing() {
               <p className="mt-3 text-xs leading-relaxed text-flare-400">{checkoutNote}</p>
             )}
             <p className="mt-3 text-center font-mono text-[10px] uppercase tracking-widest text-fog-500">
-              checkout &amp; tax handled by paddle · card details never touch this app
+              checkout &amp; tax handled by the marketplace · license key by email · card details
+              never touch this app
             </p>
           </div>
         </div>

@@ -10,18 +10,54 @@
  *   3. cleanup          — spacing, stray punctuation
  *   4. typography       — sentence capitalization, standalone "i" -> "I"
  *   5. auto-punctuation — terminal punctuation on unterminated segments
+ *
+ * Pro adds two layers on top, both resolved through ./access.ts before they
+ * get here: formatting *presets* (concise / notes) and user-defined
+ * `customCommands`. Free users get `standard` and the built-in command set, so
+ * the paid tier is a real difference in output rather than a badge.
  */
 
 export interface FormatOptions {
   removeFillers: boolean;
   applyCommands: boolean;
   autoPunctuate: boolean;
+  /** tuning preset; "standard" is the free default */
+  preset?: PresetId;
+  /** Pro: phrases the user defined, honored like built-in commands */
+  customCommands?: CustomCommand[];
+}
+
+export type PresetId = "standard" | "concise" | "notes";
+
+export interface Preset {
+  id: PresetId;
+  label: string;
+  hint: string;
+  /** true when the preset is a paid entitlement */
+  pro: boolean;
+}
+
+/** Single source for the Studio's preset picker and the cheat sheet. */
+export const PRESETS: Preset[] = [
+  { id: "standard", label: "Standard", hint: "fillers, commands, auto-punctuation", pro: false },
+  { id: "concise", label: "Concise", hint: "also drops hedges — basically, you know, I mean", pro: true },
+  { id: "notes", label: "Meeting notes", hint: "“new paragraph” becomes a bullet", pro: true },
+];
+
+export const DEFAULT_PRESET: PresetId = "standard";
+
+/** A user-defined voice command: say the phrase, get the literal text. */
+export interface CustomCommand {
+  phrase: string;
+  insert: string;
 }
 
 export const DEFAULT_FORMAT_OPTIONS: FormatOptions = {
   removeFillers: true,
   applyCommands: true,
   autoPunctuate: true,
+  preset: DEFAULT_PRESET,
+  customCommands: [],
 };
 
 export interface FormatResult {
@@ -46,6 +82,27 @@ const FILLERS = new Set([
   "um", "uh", "uhh", "uhhh", "er", "erm", "ah", "aah",
   "hmm", "hm", "mhm", "mmhmm", "mm", "mhm",
 ]);
+
+/**
+ * Hedges are the second layer of verbal noise: they survive filler removal
+ * because they are real words. Stripping them is the "concise" preset (Pro).
+ */
+const HEDGES = [
+  "at the end of the day",
+  "you know",
+  "i mean",
+  "sort of",
+  "kind of",
+  "basically",
+  "actually",
+  "obviously",
+  "essentially",
+  "literally",
+];
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 /** multi-word phrases rewritten before tokenization */
 const PHRASE_COMMANDS: Array<{ re: RegExp; replace: string; name: string }> = [
@@ -116,8 +173,11 @@ function applyTypography(text: string): string {
   let out = text;
   // standalone i -> I
   out = out.replace(/(^|[\s(])i(?=[\s.,!?)]|$)/g, "$1I");
-  // capitalize first letter after sentence end or line break
-  out = out.replace(/(^|[.!?]\s+|\n+)([a-z])/g, (_m, pre: string, ch: string) => pre + ch.toUpperCase());
+  // capitalize first letter after sentence end, line break or bullet
+  out = out.replace(
+    /(^|[.!?]\s+|\n+|•\s*)([a-z])/g,
+    (_m, pre: string, ch: string) => pre + ch.toUpperCase()
+  );
   // capitalize very first char
   out = out.replace(/^([a-z])/, (m) => m.toUpperCase());
   return out;
@@ -138,6 +198,10 @@ export function formatSpeech(
   let fillersRemoved = 0;
   let scratched = false;
 
+  const preset = opts.preset ?? DEFAULT_PRESET;
+  const dropHedges = preset === "concise" && opts.removeFillers;
+  const bulletBreaks = preset === "notes";
+
   if (opts.applyCommands) {
     for (const { re, replace, name } of PHRASE_COMMANDS) {
       re.lastIndex = 0;
@@ -146,6 +210,34 @@ export function formatSpeech(
         re.lastIndex = 0;
         work = work.replace(re, replace);
       }
+    }
+  }
+
+  // Pro custom commands: expanded before tokenizing so the literal lands in the
+  // token stream, exactly like a built-in punctuation command would.
+  const customInserts: string[] = [];
+  if (opts.applyCommands) {
+    for (const custom of opts.customCommands ?? []) {
+      const phrase = custom?.phrase?.trim();
+      const insert = custom?.insert?.trim();
+      if (!phrase || !insert) continue;
+      const re = new RegExp(`\\b${escapeRegExp(phrase)}\\b`, "gi");
+      re.lastIndex = 0;
+      if (!re.test(work)) continue;
+      re.lastIndex = 0;
+      customInserts.push(insert);
+      work = work.replace(re, ` <<X${customInserts.length - 1}>> `);
+      if (!commandsUsed.includes(phrase)) commandsUsed.push(phrase);
+    }
+  }
+
+  if (dropHedges) {
+    for (const hedge of HEDGES) {
+      const re = new RegExp(`\\b${escapeRegExp(hedge)}\\b`, "gi");
+      re.lastIndex = 0;
+      if (!re.test(work)) continue;
+      re.lastIndex = 0;
+      work = work.replace(re, " ");
     }
   }
 
@@ -174,6 +266,15 @@ export function formatSpeech(
     }
   };
 
+  /** Custom-command payload: an arbitrary literal, spaced like a word. */
+  const appendLiteral = (lit: string) => {
+    if (out.length === 0 || out.endsWith("(") || out.endsWith("\u201c")) {
+      out += lit;
+    } else {
+      out += " " + lit;
+    }
+  };
+
   for (const token of tokens) {
     if (token === "<<SCRATCH>>") {
       if (opts.applyCommands) {
@@ -186,8 +287,14 @@ export function formatSpeech(
     if (token === "<<BREAK>>") {
       if (opts.applyCommands) {
         out = out.replace(/\s+$/, "").replace(/[ \t]+$/, "");
-        out = out.replace(/([^\n])$/, "$1\n\n");
-        if (out.endsWith("\n\n") === false) out += "\n\n";
+        if (bulletBreaks) {
+          // "notes" preset: a spoken paragraph break is a bullet, not a wall
+          out = out.replace(/\n*$/, "");
+          if (out.length > 0) out += "\n\n•";
+        } else {
+          out = out.replace(/([^\n])$/, "$1\n\n");
+          if (out.endsWith("\n\n") === false) out += "\n\n";
+        }
         if (!commandsUsed.includes("new paragraph")) commandsUsed.push("new paragraph");
       }
       continue;
@@ -200,6 +307,12 @@ export function formatSpeech(
       }
       continue;
     }
+    const insertMatch = token.match(/^<<X(\d+)>>$/);
+    if (insertMatch) {
+      appendLiteral(customInserts[Number(insertMatch[1])]);
+      continue;
+    }
+
     const punctMatch = token.match(/^<<PUNCT:(.)>>$/);
     if (punctMatch) {
       if (opts.applyCommands) appendSymbol(punctMatch[1]);
@@ -230,7 +343,7 @@ export function formatSpeech(
 
   out = collapseSpacing(out);
 
-  if (opts.autoPunctuate && out.length > 0 && !/[.!?:;"\u201d\n]$/.test(out)) {
+  if (opts.autoPunctuate && out.length > 0 && !/[.!?:;"\u201d\n•]$/.test(out)) {
     out += ".";
   }
 

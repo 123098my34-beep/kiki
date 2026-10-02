@@ -31,6 +31,16 @@ test.describe("landing", () => {
     await expect(page.getByRole("cell", { name: /SOC 2/i })).toBeVisible();
   });
 
+  test("pricing states the desktop license honestly and lists what Pro unlocks", async ({ page }) => {
+    await page.goto("/#pricing");
+    const pro = page.locator("#pricing").getByText(/murmur pro/i).locator("xpath=ancestor::div[contains(@class,'card-carbon')]");
+    await expect(pro.getByText(/browser engine/i)).toBeVisible();
+    await expect(pro.getByText(/whisper base\.en/i)).toBeVisible();
+    await expect(pro.getByText(/included when that build launches \(not released yet\)/i)).toBeVisible();
+    // nothing may imply the desktop app is available today
+    await expect(page.getByText(/desktop app license \(macos \/ windows\) when it ships/i)).toHaveCount(0);
+  });
+
   test("upgrade button fails soft when payments are unconfigured", async ({ page }) => {
     await page.goto("/#pricing");
     const upgrade = page.getByRole("button", { name: /Upgrade with Paddle|Go Pro/ });
@@ -70,6 +80,22 @@ test.describe("studio", () => {
     const offline = page.getByRole("button", { name: /Offline — on-device, private/i });
     await expect(offline).toBeEnabled();
     await expect(page.getByText(/Offline is the default and always free/i)).toBeVisible();
+  });
+
+  test("the paid engine, models and presets are locked for free users", async ({ page }) => {
+    await page.goto("/studio");
+    await page.getByTestId("engine-browser").click();
+    // the honest explanation appears and the session is still offline
+    await expect(page.getByText(/audio leaves the device/i)).toBeVisible();
+    await expect(page.getByText(/engine: local/i)).toBeVisible();
+
+    await page.getByTestId("model-small").click();
+    await expect(page.getByText(/is a Pro model/i)).toBeVisible();
+    await page.getByTestId("preset-notes").click();
+    await expect(page.getByText(/is a Pro preset/i)).toBeVisible();
+
+    // …and the free path was never locked in the first place
+    await expect(page.getByTestId("engine-local")).toBeEnabled();
   });
 
   test("the badge admits it is not processing while the model fetch is blocked", async ({ page }) => {
