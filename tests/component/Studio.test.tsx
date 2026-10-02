@@ -17,6 +17,8 @@ const engineLog: {
   started: number;
   stopped: number;
   preference: "auto" | "browser" | "local";
+  access?: unknown;
+  formatOpts?: { preset?: string; customCommands?: unknown[] };
 } = { started: 0, stopped: 0, preference: "local" };
 let lastCallbacks: Callbacks = {};
 
@@ -26,10 +28,16 @@ vi.mock("../../src/lib/dictation", () => ({
     constructor(private cb: Callbacks) {
       lastCallbacks = cb;
     }
-    async start(preference: "auto" | "browser" | "local") {
+    async start(
+      preference: "auto" | "browser" | "local",
+      formatOpts?: { preset?: string; customCommands?: unknown[] },
+      access?: unknown
+    ) {
       engineLog.started += 1;
       this.isRunning = true;
       engineLog.preference = preference;
+      engineLog.formatOpts = formatOpts;
+      engineLog.access = access;
       this.cb.onEvidence?.({
         evidenced: true,
         engine: preference === "browser" ? "browser" : "local",
@@ -51,6 +59,11 @@ function renderStudio() {
       <Studio />
     </MemoryRouter>
   );
+}
+
+/** Pro is a localStorage entitlement — set it before mount, as a buyer would. */
+function unlockPro() {
+  localStorage.setItem("murmur.pro.v1", "1");
 }
 
 afterEach(cleanup);
@@ -140,6 +153,7 @@ describe("Studio — on-device activity indicator", () => {
   });
 
   it("shows an idle badge that flips live while the engine runs", async () => {
+    unlockPro();
     renderStudio();
     // cloud engine: no model fetch, so "processing" is the honest label
     fireEvent.click(screen.getByText(/Browser — fast, online/i).closest("button")!);
@@ -231,6 +245,7 @@ describe("Studio — on-device activity indicator", () => {
   });
 
   it("keeps the badge honest about the cloud engine when it is picked", async () => {
+    unlockPro();
     renderStudio();
     fireEvent.click(screen.getByText(/Browser — fast, online/i).closest("button")!);
     fireEvent.click(screen.getByLabelText("Start dictation"));
@@ -246,6 +261,82 @@ describe("Studio — on-device activity indicator", () => {
     renderStudio();
     const offlineBtn = screen.getByText(/Offline — on-device, private/i).closest("button");
     expect(offlineBtn).toBeEnabled();
-    expect(screen.getByRole("button", { name: /Unlock Pro|See Pro/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Unlock Pro|See Pro/ }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("Studio — Pro gates", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    engineLog.started = 0;
+    engineLog.preference = "local";
+  });
+
+  it("free users cannot select the vendor engine, and are told why", () => {
+    renderStudio();
+    fireEvent.click(screen.getByText(/Browser — fast, online/i).closest("button")!);
+
+    expect(screen.getByText(/audio leaves the device/i)).toBeInTheDocument();
+    // still offline — the privacy default was not quietly switched
+    fireEvent.click(screen.getByLabelText("Start dictation"));
+    expect(engineLog.preference).toBe("local");
+  });
+
+  it("marks the paid engines, models and presets as Pro while free", () => {
+    renderStudio();
+    expect(screen.getAllByText(/^pro$/i).length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByTestId("engine-browser")).toHaveTextContent(/pro/i);
+    expect(screen.getByTestId("model-base")).toHaveTextContent(/pro/i);
+    expect(screen.getByTestId("preset-concise")).toHaveTextContent(/pro/i);
+    // the free path carries no lock
+    expect(screen.getByTestId("engine-local")).not.toHaveTextContent(/pro/i);
+    expect(screen.getByTestId("model-tiny")).not.toHaveTextContent(/pro/i);
+  });
+
+  it("free users can still pick the standard preset and the free model", () => {
+    renderStudio();
+    fireEvent.click(screen.getByTestId("model-tiny"));
+    fireEvent.click(screen.getByTestId("preset-standard"));
+    expect(screen.queryByText(/is a Pro model/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/is a Pro preset/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps custom voice commands behind Pro, and hands them over after activation", () => {
+    renderStudio();
+    expect(screen.getByText(/Pro lets you teach Murmur your own phrases/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Phrase you say")).not.toBeInTheDocument();
+
+    // activate a key the way a Gumroad buyer does
+    fireEvent.change(screen.getByLabelText("License key"), { target: { value: "ABCD-1234-KEY" } });
+    fireEvent.click(screen.getByRole("button", { name: /Activate/i }));
+
+    expect(screen.getByLabelText("Phrase you say")).toBeInTheDocument();
+  });
+
+  it("an activated key unlocks the bigger model and the paid presets", () => {
+    renderStudio();
+    fireEvent.change(screen.getByLabelText("License key"), { target: { value: "ABCD-1234-KEY" } });
+    fireEvent.click(screen.getByRole("button", { name: /Activate/i }));
+
+    fireEvent.click(screen.getByTestId("model-small"));
+    expect(screen.queryByText(/is a Pro model/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("model-small")).toHaveClass("border-signal-500/60");
+    // and the choice survives a reload
+    expect(localStorage.getItem("murmur.model.v1")).toBe("small");
+
+    fireEvent.click(screen.getByTestId("preset-notes"));
+    expect(localStorage.getItem("murmur.preset.v1")).toBe("notes");
+  });
+
+  it("passes the clamped access bundle to the engine on start", async () => {
+    renderStudio();
+    fireEvent.click(screen.getByLabelText("Start dictation"));
+    await screen.findByLabelText("Stop dictation");
+    expect(engineLog.access).toEqual({
+      tier: "free",
+      model: "tiny",
+      preset: "standard",
+      customCommands: false,
+    });
   });
 });

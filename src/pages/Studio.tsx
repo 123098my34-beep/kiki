@@ -24,9 +24,29 @@ import {
 } from "../lib/dictation";
 import {
   browserSpeechAvailable,
+  MODEL_OPTIONS,
+  modelOption,
+  modelSizeLabel,
   type EnginePreference,
+  type ModelChoice,
 } from "../lib/asr";
-import { DEFAULT_FORMAT_OPTIONS, VOICE_COMMANDS, wordCount } from "../lib/format";
+import {
+  DEFAULT_FORMAT_OPTIONS,
+  PRESETS,
+  VOICE_COMMANDS,
+  wordCount,
+  type CustomCommand,
+  type PresetId,
+} from "../lib/format";
+import {
+  accessFor,
+  clampModel,
+  clampPreset,
+  customCommandsAllowed,
+  modelAllowed,
+  presetAllowed,
+  type Tier,
+} from "../lib/access";
 import {
   activateLicense,
   gumroadConfig,
@@ -49,6 +69,26 @@ const ENGINE_LABEL: Record<EnginePreference, string> = {
   browser: "Browser — fast, online",
   local: "Offline — on-device, private",
 };
+
+const MODEL_KEY = "murmur.model.v1";
+const PRESET_KEY = "murmur.preset.v1";
+const COMMANDS_KEY = "murmur.commands.v1";
+
+function stored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function store(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* private mode — the choice just doesn't persist */
+  }
+}
 
 /** Human-readable byte size for the one-time model download readout. */
 function formatBytes(bytes: number): string {
@@ -75,6 +115,33 @@ export default function Studio() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [pro, setProState] = useState(isPro());
+  const [model, setModel] = useState<ModelChoice>(() => {
+    const v = stored(MODEL_KEY);
+    return MODEL_OPTIONS.some((m) => m.id === v) ? (v as ModelChoice) : "tiny";
+  });
+  const [preset, setPreset] = useState<PresetId>(() => {
+    const v = stored(PRESET_KEY);
+    return PRESETS.some((p) => p.id === v) ? (v as PresetId) : "standard";
+  });
+  const [customCommands, setCustomCommands] = useState<CustomCommand[]>(() => {
+    try {
+      const parsed: unknown = JSON.parse(stored(COMMANDS_KEY) ?? "[]");
+      return Array.isArray(parsed)
+        ? parsed.filter(
+            (c): c is CustomCommand =>
+              typeof (c as CustomCommand)?.phrase === "string" &&
+              (c as CustomCommand).phrase.trim().length > 0 &&
+              typeof (c as CustomCommand)?.insert === "string" &&
+              (c as CustomCommand).insert.trim().length > 0
+          )
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  const [gateNote, setGateNote] = useState("");
+  const [phraseDraft, setPhraseDraft] = useState("");
+  const [insertDraft, setInsertDraft] = useState("");
   const [checkoutNote, setCheckoutNote] = useState("");
   const [licenseInput, setLicenseInput] = useState("");
   const [licenseMsg, setLicenseMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -100,6 +167,12 @@ export default function Studio() {
   const [fmtUi, setFmtUi] = useState({ ...DEFAULT_FORMAT_OPTIONS });
 
   const speechOk = browserSpeechAvailable();
+
+  /** Entitlement, resolved once per render and clamped — never trusted raw. */
+  const tier: Tier = pro ? "pro" : "free";
+  const activeModel = clampModel(model, tier);
+  const activePreset = clampPreset(preset, tier);
+  const customAllowed = customCommandsAllowed(tier);
 
   useEffect(() => {
     const handler = () => setProState(isPro());
@@ -140,7 +213,14 @@ export default function Studio() {
       },
     });
     engineRef.current = engine;
-    await engine.start(preference, fmtRef.current);
+    // Clamp the formatting config too: a stored Pro preset or custom command
+    // must not survive a downgrade or a shared browser profile.
+    const startOpts = {
+      ...fmtRef.current,
+      preset: activePreset,
+      customCommands: customAllowed ? (fmtRef.current.customCommands ?? []) : [],
+    };
+    await engine.start(preference, startOpts, accessFor(pro, activeModel));
     if (engine.isRunning) {
       setListening(true);
     } else {
@@ -169,8 +249,74 @@ export default function Studio() {
   };
 
   const pickEngine = (pref: EnginePreference) => {
+    if (pref !== "local" && !pro) {
+      setGateNote(
+        pref === "browser"
+          ? "The browser engine runs on your browser vendor's cloud — audio leaves the device. That's a Pro path; offline stays free forever."
+          : "Auto picks the browser engine when it's available, so it's Pro for the same reason. Offline is free and always available."
+      );
+      return;
+    }
+    setGateNote("");
     if (listening) stop();
     setPreference(pref);
+  };
+
+  const pickModel = (id: ModelChoice) => {
+    if (!modelAllowed(id, tier)) {
+      setGateNote(
+        `${modelOption(id).label} is a Pro model (~${modelOption(id).approxMB} MB, better accuracy). Free stays on Whisper tiny.en.`
+      );
+      return;
+    }
+    setGateNote("");
+    setModel(id);
+    store(MODEL_KEY, id);
+  };
+
+  const pickPreset = (id: PresetId) => {
+    if (!presetAllowed(id, tier)) {
+      setGateNote(
+        `${PRESETS.find((p) => p.id === id)?.label ?? id} is a Pro preset. Standard formatting stays free forever.`
+      );
+      return;
+    }
+    setGateNote("");
+    setPreset(id);
+    store(PRESET_KEY, id);
+    fmtRef.current.preset = id;
+    setFmtUi((s) => ({ ...s, preset: id }));
+  };
+
+  const persistCommands = (next: CustomCommand[]) => {
+    setCustomCommands(next);
+    fmtRef.current.customCommands = next;
+    try {
+      localStorage.setItem(COMMANDS_KEY, JSON.stringify(next));
+    } catch {
+      /* private mode — commands last for this session only */
+    }
+  };
+
+  const addCommand = () => {
+    const phrase = phraseDraft.trim();
+    const insert = insertDraft.trim();
+    if (!phrase || !insert) {
+      setGateNote("A custom command needs both the phrase you say and the text it inserts.");
+      return;
+    }
+    if (customCommands.some((c) => c.phrase.toLowerCase() === phrase.toLowerCase())) {
+      setGateNote(`“${phrase}” is already a custom command.`);
+      return;
+    }
+    setGateNote("");
+    persistCommands([...customCommands, { phrase, insert }]);
+    setPhraseDraft("");
+    setInsertDraft("");
+  };
+
+  const removeCommand = (phrase: string) => {
+    persistCommands(customCommands.filter((c) => c.phrase !== phrase));
   };
 
   const onActivate = () => {
@@ -318,7 +464,9 @@ export default function Studio() {
                       · one time
                     </span>
                   ) : evidence.preparing ? (
-                    <span data-testid="evidence-progress-detail">~40 MB · one time</span>
+                    <span data-testid="evidence-progress-detail">
+                      {modelSizeLabel(evidence.model ?? activeModel)} · one time
+                    </span>
                   ) : evidence.engine === "local" ? (
                     "local · no data leaves this browser"
                   ) : (
@@ -335,21 +483,25 @@ export default function Studio() {
               <div className="space-y-2">
                 {(["local", "browser", "auto"] as EnginePreference[]).map((pref) => {
                   const active = preference === pref;
+                  const locked = pref !== "local" && !pro;
                   return (
                     <button
                       key={pref}
                       onClick={() => pickEngine(pref)}
+                      data-testid={`engine-${pref}`}
                       className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm transition ${
                         active
                           ? "border-signal-500/60 bg-signal-700/10 text-fog-50"
-                          : "border-white/8 text-fog-300 hover:border-white/20"
+                          : locked
+                            ? "border-dashed border-white/15 text-fog-400 hover:border-flare-400/40"
+                            : "border-white/8 text-fog-300 hover:border-white/20"
                       }`}
                     >
                       <span>{ENGINE_LABEL[pref]}</span>
                       {pref === "local" && (
                         <span className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-widest text-signal-500">
                           <WifiOff className="h-3 w-3" />
-                          default · ~40 mb
+                          default · {modelSizeLabel(activeModel)}
                         </span>
                       )}
                       {pref === "browser" && !speechOk && (
@@ -357,17 +509,58 @@ export default function Studio() {
                           n/a
                         </span>
                       )}
+                      {locked && (
+                        <span className="ml-2 shrink-0 rounded-full border border-flare-400/40 bg-flare-400/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest text-flare-400">
+                          pro
+                        </span>
+                      )}
                     </button>
                   );
                 })}
               </div>
 
+              <div className="mt-5 mb-3 font-mono text-[10px] uppercase tracking-widest text-fog-500">
+                on-device model
+              </div>
+              <div className="space-y-2">
+                {MODEL_OPTIONS.map((m) => {
+                  const locked = !modelAllowed(m.id, tier);
+                  const active = activeModel === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => pickModel(m.id)}
+                      data-testid={`model-${m.id}`}
+                      className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition ${
+                        active
+                          ? "border-signal-500/60 bg-signal-700/10 text-fog-50"
+                          : locked
+                            ? "border-dashed border-white/15 text-fog-400 hover:border-flare-400/40"
+                            : "border-white/8 text-fog-300 hover:border-white/20"
+                      }`}
+                    >
+                      <span>
+                        <span className="block">{m.label}</span>
+                        <span className="block font-mono text-[10px] text-fog-500">{m.hint}</span>
+                      </span>
+                      <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-fog-400">
+                        {locked ? "pro" : `~${m.approxMB} mb`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 font-mono text-[10px] leading-relaxed uppercase tracking-widest text-fog-500">
+                offline engine only · downloads once · cached after that
+              </p>
+
               <div className="mt-4 rounded-lg border border-signal-500/20 bg-signal-700/5 p-3">
                 <p className="text-xs leading-relaxed text-fog-300">
                   <WifiOff className="mr-1.5 inline h-3.5 w-3.5 text-signal-400" />
-                  Offline is the default and always free — the model downloads once (~40 MB),
-                  then your audio never leaves this device. Pro adds the browser engine's speed,
-                  unlimited words and voice commands everywhere.
+                  Offline is the default and always free — {modelOption(activeModel).label} downloads
+                  once ({modelSizeLabel(activeModel)}), then your audio never leaves this device.
+                  Pro unlocks the browser engine, the bigger base/small models, advanced presets
+                  and your own voice commands.
                 </p>
                 {!pro && (
                   <button
@@ -382,6 +575,20 @@ export default function Studio() {
                 )}
               </div>
             </div>
+
+            {gateNote && (
+              <div className="rounded-2xl border border-flare-400/30 bg-flare-400/10 p-4">
+                <p className="text-xs leading-relaxed text-flare-400">{gateNote}</p>
+                {!pro && (
+                  <button
+                    onClick={onUpgrade}
+                    className="mt-2 rounded-lg bg-flare-400 px-3 py-1.5 text-xs font-semibold text-carbon-950 transition hover:bg-flare-500"
+                  >
+                    {paddleReady() ? "Unlock Pro" : "See Pro"}
+                  </button>
+                )}
+              </div>
+            )}
 
             <div className="card-carbon rounded-2xl p-5">
               <div className="mb-3 font-mono text-[10px] uppercase tracking-widest text-fog-500">
@@ -417,6 +624,118 @@ export default function Studio() {
                   </label>
                 ))}
               </div>
+
+              <div className="mt-5 mb-3 font-mono text-[10px] uppercase tracking-widest text-fog-500">
+                preset
+              </div>
+              <div className="space-y-2">
+                {PRESETS.map((p) => {
+                  const locked = !presetAllowed(p.id, tier);
+                  const active = activePreset === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => pickPreset(p.id)}
+                      data-testid={`preset-${p.id}`}
+                      className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition ${
+                        active
+                          ? "border-signal-500/60 bg-signal-700/10 text-fog-50"
+                          : locked
+                            ? "border-dashed border-white/15 text-fog-400 hover:border-flare-400/40"
+                            : "border-white/8 text-fog-300 hover:border-white/20"
+                      }`}
+                    >
+                      <span>
+                        <span className="block">{p.label}</span>
+                        <span className="block font-mono text-[10px] text-fog-500">{p.hint}</span>
+                      </span>
+                      {locked && (
+                        <span className="shrink-0 rounded-full border border-flare-400/40 bg-flare-400/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest text-flare-400">
+                          pro
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="card-carbon rounded-2xl p-5">
+              <div className="mb-3 flex items-center justify-between gap-2 font-mono text-[10px] uppercase tracking-widest text-fog-500">
+                <span>custom voice commands</span>
+                {!customAllowed && (
+                  <span className="rounded-full border border-flare-400/40 bg-flare-400/10 px-2 py-0.5 text-flare-400">
+                    pro
+                  </span>
+                )}
+              </div>
+
+              {!customAllowed ? (
+                <>
+                  <p className="text-xs leading-relaxed text-fog-300">
+                    Pro lets you teach Murmur your own phrases — say{" "}
+                    <em>&ldquo;arrow&rdquo;</em> and get <em>&rarr;</em>, say{" "}
+                    <em>&ldquo;hash&rdquo;</em> and get <em>#</em>. The built-in command set above
+                    stays free forever.
+                  </p>
+                  <button
+                    onClick={onUpgrade}
+                    className="mt-3 w-full rounded-lg bg-flare-400 px-3 py-1.5 text-xs font-semibold text-carbon-950 transition hover:bg-flare-500"
+                  >
+                    {paddleReady() ? "Unlock Pro" : "See Pro"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        value={phraseDraft}
+                        onChange={(e) => setPhraseDraft(e.target.value)}
+                        aria-label="Phrase you say"
+                        placeholder="phrase — e.g. arrow"
+                        className="min-w-0 flex-1 rounded-lg border border-white/10 bg-carbon-950 px-3 py-2 font-mono text-xs text-fog-100 placeholder:text-fog-500 focus:border-signal-500 focus:outline-none"
+                      />
+                      <input
+                        value={insertDraft}
+                        onChange={(e) => setInsertDraft(e.target.value)}
+                        aria-label="Text it inserts"
+                        placeholder="inserts — e.g. →"
+                        className="min-w-0 flex-1 rounded-lg border border-white/10 bg-carbon-950 px-3 py-2 font-mono text-xs text-fog-100 placeholder:text-fog-500 focus:border-signal-500 focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={addCommand}
+                      className="w-full rounded-lg bg-signal-500 px-3 py-2 text-xs font-semibold text-carbon-950 transition hover:bg-signal-400"
+                    >
+                      Add command
+                    </button>
+                  </div>
+
+                  {customCommands.length > 0 && (
+                    <ul className="mt-4 space-y-2">
+                      {customCommands.map((c) => (
+                        <li
+                          key={c.phrase}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-carbon-950/60 px-3 py-2"
+                        >
+                          <span className="min-w-0 font-mono text-xs text-fog-200">
+                            &ldquo;{c.phrase}&rdquo; →{" "}
+                            <span className="text-signal-300">{c.insert}</span>
+                          </span>
+                          <button
+                            onClick={() => removeCommand(c.phrase)}
+                            aria-label={`Remove ${c.phrase}`}
+                            className="shrink-0 text-fog-500 transition hover:text-flare-400"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
             </div>
 
             {!pro && (
@@ -482,6 +801,7 @@ export default function Studio() {
               </ul>
               <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-fog-500">
                 honored in both engines · toggle them off under formatting
+                {customAllowed ? " · plus your own commands above" : " · custom commands are Pro"}
               </p>
             </details>
           </div>
@@ -620,8 +940,8 @@ export default function Studio() {
             </div>
 
             <p className="font-mono text-[10px] leading-relaxed uppercase tracking-widest text-fog-500">
-              desktop build (global hotkey + type-into-any-app) ships next · same engine, same
-              license
+              desktop build (global hotkey + type-into-any-app) has not shipped yet · its license
+              is included with Pro when it launches, no second purchase
             </p>
           </div>
         </div>

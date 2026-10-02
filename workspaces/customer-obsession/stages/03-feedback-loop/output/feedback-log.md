@@ -86,3 +86,39 @@ Format: `### CARD-<n> — <status>` · status ∈ open / proposed / solving / ve
   green — see `tests/QA-REPORT.md`.
 - **Still open:** no "use the browser engine meanwhile" escape hatch during the
   fetch. Human gate on whether to add one.
+
+### CARD-008 — verified
+- **Signal (deduction, found by reading the local-session path):** CARD-007
+  taught the *badge* to admit it is not processing. The *status line* right
+  above it was left telling the truth's opposite for the whole same window:
+  `createLocalSession.start()` ends with
+  `onStatus("Offline engine armed — speak freely.")` unconditionally, before
+  the ~40 MB pipeline resolves and before a single sample can be transcribed.
+  A warm (cached) user sees a regression vs. a cold user for no reason.
+- **Signal (same path, second defect):** `node.connect(ctx.destination)` wires
+  the raw microphone straight to the speakers. ScriptProcessorNode is a
+  deprecated keep-alive trick that only fires while connected to a destination —
+  connecting it to `destination` unmuted means the user's own voice is played
+  back through their speakers, which on any machine with non-headset audio is a
+  feedback howl. The standard fix is a `gain = 0` tap.
+- **Promise:** P1, P5. P1 ("the Studio proves it live") is a promise about
+  *proof*, and a proof surface that lies between 0% and 100% of a download
+  is worse than no proof. P5 ("speak — it's already typed") is broken outright
+  by a howl.
+- **Propose:** (a) hold the "armed, speak freely" status until the pipeline is
+  actually ready, and say what *is* true while it isn't; (b) route the
+  ScriptProcessor through a muted gain node.
+- **Solve:** `announceReady()` in `createLocalSession` gates the "armed, speak
+  freely" / "Transcribing on-device…" statuses on a `modelReady` flag set when
+  the pipeline resolves; until then it says *"Offline model loading — keep
+  talking, your words are kept."* — which is true, because the mic keeps
+  capturing and the segments are still queued. The audio graph now runs
+  `source → ScriptProcessor → gain(0) → destination`, so the node stays alive
+  but the mic is inaudible. A third defect surfaced while writing the tests:
+  model status bypassed the session's `running` guard, so a pipeline resolving
+  after stop overwrote the user's "Stopped." — `pipelineStatus` now gates it.
+- **Verify:** `tests/unit/asr-local-session.test.ts` (6 tests, fake AudioContext
+  recording the real graph). All four new guards were proven real by reverting
+  the source: un-muting the tap fails the graph test, and restoring the eager
+  status fails 3 honesty tests. 65 unit/component + 12 e2e green — see
+  `tests/QA-REPORT.md`.

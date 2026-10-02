@@ -26,6 +26,8 @@ export interface DictationEvidence {
   preparing: boolean;
   /** one-time model download in flight; null when idle or already cached */
   progress: ModelProgress | null;
+  /** the on-device model this session may load — drives the size readout */
+  model?: ModelChoice;
 }
 
 export interface DictationCallbacks {
@@ -45,6 +47,7 @@ import {
   resolveEngine,
   type AsrSession,
   type EnginePreference,
+  type ModelChoice,
   type ModelProgress,
   type ResolvedEngine,
 } from "./asr";
@@ -53,6 +56,7 @@ import {
   formatSpeech,
   type FormatOptions,
 } from "./format";
+import { clampModel, FREE_ACCESS, type Access } from "./access";
 
 export type DictationState = "idle" | "starting" | "listening" | "error";
 
@@ -72,6 +76,7 @@ export class DictationEngine {
     engine: "local",
     preparing: false,
     progress: null,
+    model: FREE_ACCESS.model,
   };
 
   constructor(private callbacks: DictationCallbacks = {}) {}
@@ -82,7 +87,8 @@ export class DictationEngine {
 
   async start(
     preference: EnginePreference,
-    formatOpts: FormatOptions = DEFAULT_FORMAT_OPTIONS
+    formatOpts: FormatOptions = DEFAULT_FORMAT_OPTIONS,
+    access: Access = FREE_ACCESS
   ): Promise<void> {
     if (this.running) return;
     this.setState("starting");
@@ -90,9 +96,14 @@ export class DictationEngine {
 
     let engine: ResolvedEngine;
     try {
-      engine = resolveEngine(preference);
+      // Entitlement decides what the session may use before anything starts —
+      // the mic is never opened for a path this license does not cover, and a
+      // requested model is clamped to the tier rather than trusted.
+      const model = clampModel(access.model, access.tier);
+      engine = resolveEngine(preference, access.tier);
       this.callbacks.onEngine?.(engine);
       this.evidence.engine = engine;
+      this.evidence.model = model;
       this.evidence.progress = null;
       // A cold offline engine has to fetch ~40 MB before it can transcribe
       // anything. Say so immediately rather than implying it already can.
@@ -112,6 +123,8 @@ export class DictationEngine {
 
       this.session = createSession({
         preference,
+        tier: access.tier,
+        model,
         handlers: {
           onPartial: (text) => this.callbacks.onPartial?.(text),
           onFinal: (text) => {

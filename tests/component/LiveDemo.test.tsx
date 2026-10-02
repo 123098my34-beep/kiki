@@ -1,6 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import LiveDemo from "../../src/components/LiveDemo";
+
+/** what the demo engine was started with — the Pro gate must show up here */
+let lastStart: { preference: string; access?: { tier?: string } } = { preference: "" };
+
+vi.mock("../../src/lib/dictation", () => ({
+  DictationEngine: class {
+    isRunning = false;
+    async start(preference: string, _fmt?: unknown, access?: { tier?: string }) {
+      lastStart = { preference, access };
+      this.isRunning = true;
+    }
+    stop() {
+      this.isRunning = false;
+    }
+  },
+}));
 
 afterEach(cleanup);
 
@@ -42,6 +58,33 @@ describe("LiveDemo", () => {
     expect(screen.getByText(/−2 fillers/)).toBeInTheDocument();
     expect(screen.getByText("⌘ scratch that")).toBeInTheDocument();
     expect(screen.getByText("⌘ new line")).toBeInTheDocument();
+  });
+
+  it("starts the demo with the visitor's entitlement, not a Pro cloud path", () => {
+    // Web Speech exists here so the live mic is enabled
+    Object.defineProperty(window, "webkitSpeechRecognition", {
+      configurable: true,
+      value: function Fake() {},
+    });
+    render(<LiveDemo />);
+    fireEvent.click(screen.getByText("Dictate live"));
+    expect(lastStart.access).toEqual({
+      tier: "free",
+      model: "tiny",
+      preset: "standard",
+      customCommands: false,
+    });
+    Reflect.deleteProperty(window, "webkitSpeechRecognition");
+  });
+
+  it("tells free visitors the demo downloads a model before dictating", () => {
+    Object.defineProperty(window, "webkitSpeechRecognition", {
+      configurable: true,
+      value: function Fake() {},
+    });
+    render(<LiveDemo />);
+    expect(screen.getByText(/one-time ~40 MB model download/i)).toBeInTheDocument();
+    Reflect.deleteProperty(window, "webkitSpeechRecognition");
   });
 
   it("clears output on reset", () => {
