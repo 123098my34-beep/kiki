@@ -41,9 +41,25 @@ export const paddleConfig = {
   priceId: import.meta.env.VITE_PADDLE_PRICE_ID_PRO,
 };
 
-/** Gumroad product page (marketplace checkout — no backend needed). */
+/**
+ * Gumroad product page (marketplace checkout — no backend needed).
+ *
+ * The canonical listing lives in source rather than only in an env var: the
+ * production pipeline rewrites environment-supplied URLs into a redirect token
+ * that the static host does not resolve, which silently turned the buy button
+ * into a link back to the landing page. A constant here is baked into the
+ * bundle as-is.
+ *
+ * `VITE_GUMROAD_PRODUCT_URL` is still honoured when it is a real absolute URL,
+ * so a different host can override it — anything else is ignored rather than
+ * shipped as a dead link.
+ */
+const GUMROAD_PRODUCT_URL = "https://beepbopboop.gumroad.com/l/pro-gating-tool";
+
 export const gumroadConfig = {
-  productUrl: import.meta.env.VITE_GUMROAD_PRODUCT_URL,
+  productUrl: /^https:\/\//.test(import.meta.env.VITE_GUMROAD_PRODUCT_URL ?? "")
+    ? import.meta.env.VITE_GUMROAD_PRODUCT_URL
+    : GUMROAD_PRODUCT_URL,
 };
 
 export function gumroadReady(): boolean {

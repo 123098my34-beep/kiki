@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+/**
+ * The app under test: the managed preview locally, the deployed site in
+ * production. The privacy test below has to know which host is "us", or our
+ * own lazily-loaded chunks look like third-party traffic.
+ */
+const APP_ORIGIN = new URL(process.env.E2E_BASE_URL ?? "http://localhost:5173").origin;
+
 test.describe("landing", () => {
   test("loads with hero, nav and all promised sections", async ({ page }) => {
     await page.goto("/");
@@ -132,7 +139,8 @@ test.describe("studio", () => {
     const external: { method: string; url: string }[] = [];
     page.on("request", (r) => {
       const u = new URL(r.url());
-      if (u.hostname === "localhost" || u.hostname === "127.0.0.1") return;
+      // our own bundle — including chunks fetched lazily from the deployed host
+      if (u.origin === APP_ORIGIN) return;
       external.push({ method: r.method(), url: r.url() });
     });
 
