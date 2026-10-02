@@ -77,6 +77,116 @@ const MODEL_CANDIDATES: Array<{ model: string; opts: Record<string, unknown> }> 
   { model: "Xenova/whisper-tiny.en", opts: {} },
 ];
 
+/* ------------------------------------------------------------------ */
+/* Model download progress                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Cold start pulls ~40 MB of weights. "Downloading" and "processing" are
+ * different facts, so progress rides its own channel rather than being
+ * squashed into the status string — the Studio badge must be able to say
+ * which one is true.
+ */
+export interface ModelProgress {
+  /** bytes fetched so far, across all files of the model */
+  loaded: number;
+  /** total bytes expected, or 0 while unknown */
+  total: number;
+  /** 0–100, or null while the total is still unknown */
+  percent: number | null;
+  /** true once every file has arrived and the pipeline is usable */
+  done: boolean;
+}
+
+type ProgressListener = (p: ModelProgress) => void;
+
+const progressListeners = new Set<ProgressListener>();
+/** per-file byte counts, so parallel downloads aggregate instead of clobbering */
+const fileBytes = new Map<string, { loaded: number; total: number }>();
+let progressDone = false;
+
+function emitProgress(): void {
+  let loaded = 0;
+  let total = 0;
+  for (const v of fileBytes.values()) {
+    loaded += v.loaded;
+    total += v.total;
+  }
+  const snapshot: ModelProgress = {
+    loaded,
+    total,
+    percent: total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : null,
+    done: progressDone,
+  };
+  for (const listener of progressListeners) listener(snapshot);
+}
+
+/** Subscribe to download progress. Returns an unsubscribe function. */
+export function onModelProgress(listener: ProgressListener): () => void {
+  progressListeners.add(listener);
+  return () => {
+    progressListeners.delete(listener);
+  };
+}
+
+/** Test seam: drop the memoized pipeline so a fresh download can be simulated. */
+export function __resetLocalPipeline(): void {
+  pipePromise = null;
+  progressDone = false;
+  fileBytes.clear();
+}
+
+interface TransformersProgressEvent {
+  status?: string;
+  file?: string;
+  loaded?: number;
+  total?: number;
+  /** aggregate across files, present on `progress_total` */
+  files?: Record<string, { loaded: number; total: number }>;
+}
+
+/**
+ * transformers.js emits several event shapes; the aggregate `progress_total`
+ * is authoritative because files download in parallel and per-file events
+ * would otherwise clobber each other.
+ */
+function makeProgressCallback(): (e: TransformersProgressEvent) => void {
+  return (e) => {
+    switch (e.status) {
+      case "ready":
+        progressDone = true;
+        emitProgress();
+        return;
+      case "done":
+        return; // progress_total already accounts for this file
+      case "initiate":
+      case "download": {
+        const file = e.file ?? "_unknown";
+        if (!fileBytes.has(file)) fileBytes.set(file, { loaded: 0, total: e.total ?? 0 });
+        emitProgress();
+        return;
+      }
+      case "progress": {
+        const file = e.file ?? "_unknown";
+        const prev = fileBytes.get(file);
+        fileBytes.set(file, { loaded: e.loaded ?? 0, total: e.total ?? prev?.total ?? 0 });
+        emitProgress();
+        return;
+      }
+      case "progress_total": {
+        fileBytes.clear();
+        for (const [file, v] of Object.entries(e.files ?? {})) {
+          fileBytes.set(file, { loaded: v.loaded, total: v.total });
+        }
+        emitProgress();
+        return;
+      }
+      default:
+        return;
+    }
+  };
+}
+
 let pipePromise: Promise<AsrPipeline> | null = null;
 
 async function getLocalPipeline(onStatus?: (msg: string) => void): Promise<AsrPipeline> {
@@ -90,8 +200,10 @@ async function getLocalPipeline(onStatus?: (msg: string) => void): Promise<AsrPi
           const pipe = (await mod.pipeline(
             "automatic-speech-recognition",
             candidate.model,
-            candidate.opts
+            { ...candidate.opts, progress_callback: makeProgressCallback() }
           )) as unknown as AsrPipeline;
+          progressDone = true;
+          emitProgress();
           onStatus?.("Offline model ready.");
           return pipe;
         } catch (err) {
@@ -103,6 +215,8 @@ async function getLocalPipeline(onStatus?: (msg: string) => void): Promise<AsrPi
     pipePromise = run();
     pipePromise.catch(() => {
       pipePromise = null; // allow retry next time
+      progressDone = false;
+      emitProgress();
     });
   }
   return pipePromise;
@@ -131,6 +245,10 @@ export interface AsrHandlers {
   onFinal?: (text: string) => void;
   onStatus?: (message: string) => void;
   onError?: (message: string) => void;
+  /** fires while the one-time model download runs; absent once cached */
+  onModelProgress?: (p: ModelProgress) => void;
+  /** the model could not be loaded at all — stops the download readout */
+  onModelError?: () => void;
 }
 
 export interface AsrSession {
@@ -307,9 +425,17 @@ function createLocalSession(handlers: AsrHandlers): AsrSession {
       source.connect(node);
       node.connect(ctx.destination);
       // warm the model in the background so first utterance isn't slow
-      void getLocalPipeline(handlers.onStatus).catch(() => {
-        /* surfaced on first transcribe */
-      });
+      const unsubscribe = handlers.onModelProgress
+        ? onModelProgress(handlers.onModelProgress)
+        : null;
+      void getLocalPipeline(handlers.onStatus)
+        .catch(() => {
+          handlers.onModelError?.();
+          /* surfaced on first transcribe */
+        })
+        .finally(() => {
+          unsubscribe?.();
+        });
       handlers.onStatus?.("Offline engine armed — speak freely.");
     },
     stop() {

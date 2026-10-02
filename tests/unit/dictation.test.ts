@@ -3,7 +3,12 @@ import {
   DictationEngine,
   type DictationEvidence,
 } from "../../src/lib/dictation";
-import { resolveEngine, type ResolvedEngine } from "../../src/lib/asr";
+import {
+  resolveEngine,
+  type AsrHandlers,
+  type ModelProgress,
+  type ResolvedEngine,
+} from "../../src/lib/asr";
 
 /**
  * The on-device activity indicator is the load-bearing claim of Murmur, so
@@ -14,6 +19,8 @@ import { resolveEngine, type ResolvedEngine } from "../../src/lib/asr";
 
 const start = vi.fn(async () => {});
 const stopSession = vi.fn();
+/** the handler bag DictationEngine handed to createSession on the last start() */
+let sessionHandlers: AsrHandlers = {};
 
 vi.mock("../../src/lib/asr", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/lib/asr")>();
@@ -21,11 +28,14 @@ vi.mock("../../src/lib/asr", async (importOriginal) => {
     ...actual,
     resolveEngine: (pref: string): ResolvedEngine =>
       pref === "local" || pref === "browser" ? (pref as ResolvedEngine) : actual.resolveEngine(pref as never),
-    createSession: (opts: { preference: string }) => ({
-      engine: opts.preference === "local" ? "local" : "browser",
-      start,
-      stop: stopSession,
-    }),
+    createSession: (opts: { preference: string; handlers: AsrHandlers }) => {
+      sessionHandlers = opts.handlers;
+      return {
+        engine: opts.preference === "local" ? "local" : "browser",
+        start,
+        stop: stopSession,
+      };
+    },
   };
 });
 
@@ -57,6 +67,7 @@ const fakeStream = {
 beforeEach(() => {
   start.mockClear();
   stopSession.mockClear();
+  sessionHandlers = {};
   vi.stubGlobal("AudioContext", FakeAudioContext);
   Object.defineProperty(navigator, "mediaDevices", {
     configurable: true,
@@ -71,7 +82,12 @@ afterEach(() => {
 describe("DictationEngine — on-device activity evidence", () => {
   it("starts idle and reports the local engine by default", () => {
     const engine = new DictationEngine();
-    expect(engine.evidence).toEqual({ evidenced: false, engine: "local" });
+    expect(engine.evidence).toEqual({
+      evidenced: false,
+      engine: "local",
+      preparing: false,
+      progress: null,
+    });
     expect(engine.isRunning).toBe(false);
   });
 
@@ -81,26 +97,90 @@ describe("DictationEngine — on-device activity evidence", () => {
       onEvidence: (e) => seen.push(e),
     });
 
-    await engine.start("local");
+    await engine.start("browser");
     expect(engine.isRunning).toBe(true);
-    expect(seen).toHaveLength(1);
-    expect(seen[0]).toEqual({ evidenced: true, engine: "local" });
+    expect(seen[0]).toEqual({
+      evidenced: true,
+      engine: "browser",
+      preparing: false,
+      progress: null,
+    });
 
     engine.stop();
     expect(engine.isRunning).toBe(false);
-    expect(seen).toHaveLength(2);
-    expect(seen[1]).toEqual({ evidenced: false, engine: "local" });
+    expect(seen[1]).toEqual({
+      evidenced: false,
+      engine: "browser",
+      preparing: false,
+      progress: null,
+    });
   });
 
-  it("labels the badge honestly when the cloud engine is chosen", async () => {
+  it("never claims local processing before the model is actually ready", async () => {
+    const engine = new DictationEngine();
+    await engine.start("local");
+    // transformers.js resolves file metadata before its first progress event,
+    // so the engine is running but NOT yet able to transcribe.
+    expect(engine.isRunning).toBe(true);
+    expect(engine.evidence.evidenced).toBe(true);
+    expect(engine.evidence.preparing).toBe(true);
+    expect(engine.evidence.progress).toBeNull();
+    engine.stop();
+  });
+
+  it("does not claim preparation when the cloud engine needs no model", async () => {
+    const engine = new DictationEngine();
+    await engine.start("browser");
+    expect(engine.evidence.preparing).toBe(false);
+    engine.stop();
+  });
+
+  it("surfaces model download progress on the evidence and clears it when done", async () => {
     const seen: DictationEvidence[] = [];
+    const reported: ModelProgress[] = [];
     const engine = new DictationEngine({
       onEvidence: (e) => seen.push(e),
+      onModelProgress: (p) => reported.push(p),
     });
 
-    await engine.start("browser");
-    expect(seen[0].engine).toBe("browser");
-    expect(seen[0].evidenced).toBe(true);
+    await engine.start("local");
+    expect(engine.evidence.preparing).toBe(true);
+
+    const partial: ModelProgress = { loaded: 5_000_000, total: 40_000_000, percent: 13, done: false };
+    sessionHandlers.onModelProgress?.(partial);
+    expect(engine.evidence.progress).toEqual(partial);
+    expect(seen.at(-1)).toEqual({
+      evidenced: true,
+      engine: "local",
+      preparing: true,
+      progress: partial,
+    });
+
+    sessionHandlers.onModelProgress?.({
+      loaded: 40_000_000,
+      total: 40_000_000,
+      percent: 100,
+      done: true,
+    });
+    expect(engine.evidence.progress).toBeNull();
+    expect(engine.evidence.preparing).toBe(false);
+    expect(reported).toHaveLength(2);
+
+    engine.stop();
+    expect(engine.evidence.progress).toBeNull();
+    expect(engine.evidence.preparing).toBe(false);
+  });
+
+  it("stops claiming a download when the model fails to load", async () => {
+    const engine = new DictationEngine();
+    await engine.start("local");
+    expect(engine.evidence.preparing).toBe(true);
+
+    sessionHandlers.onModelError?.();
+    expect(engine.evidence.preparing).toBe(false);
+    expect(engine.evidence.progress).toBeNull();
+    // still running, but honest that the model is not there
+    expect(engine.isRunning).toBe(true);
     engine.stop();
   });
 

@@ -50,10 +50,21 @@ const ENGINE_LABEL: Record<EnginePreference, string> = {
   local: "Offline — on-device, private",
 };
 
+/** Human-readable byte size for the one-time model download readout. */
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 MB";
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function Studio() {
   const [listening, setListening] = useState(false);
   const [state, setState] = useState<DictationState>("idle");
-  const [evidence, setEvidence] = useState<DictationEvidence>({ evidenced: false, engine: "local" });
+  const [evidence, setEvidence] = useState<DictationEvidence>({
+    evidenced: false,
+    engine: "local",
+    preparing: false,
+    progress: null,
+  });
   const [preference, setPreference] = useState<EnginePreference>("local");
   const [level, setLevel] = useState(0);
   const [partial, setPartial] = useState("");
@@ -266,25 +277,53 @@ export default function Studio() {
                 <div className="flex items-center gap-2.5">
                   <span
                     className={`relative flex h-2.5 w-2.5 shrink-0 rounded-full ${
-                      evidence.evidenced ? "bg-signal-400" : "bg-fog-500"
+                      evidence.progress || evidence.preparing
+                        ? "bg-flare-400"
+                        : evidence.evidenced
+                          ? "bg-signal-400"
+                          : "bg-fog-500"
                     }`}
                   >
-                    {evidence.evidenced && (
+                    {(evidence.evidenced || evidence.progress || evidence.preparing) && (
                       <span className="absolute h-full w-full animate-ping rounded-full bg-current opacity-40" />
                     )}
                   </span>
                   <span
                     className={`font-mono text-xs uppercase tracking-widest ${
-                      evidence.evidenced ? "text-signal-300" : "text-fog-500"
+                      evidence.progress || evidence.preparing
+                        ? "text-flare-400"
+                        : evidence.evidenced
+                          ? "text-signal-300"
+                          : "text-fog-500"
                     }`}
                   >
-                    {evidence.evidenced ? "local processing active" : "engine idle"}
+                    {evidence.progress
+                      ? evidence.progress.percent !== null
+                        ? `downloading model · ${evidence.progress.percent}%`
+                        : "downloading model"
+                      : evidence.preparing
+                        ? "preparing local model"
+                        : evidence.evidenced
+                          ? "local processing active"
+                          : "engine idle"}
                   </span>
                 </div>
                 <span className="font-mono text-[10px] text-fog-400">
-                  {evidence.engine === "local"
-                    ? "local · no data leaves this browser"
-                    : "online · cloud engine"}
+                  {evidence.progress ? (
+                    <span data-testid="evidence-progress-detail">
+                      {formatBytes(evidence.progress.loaded)}
+                      {evidence.progress.total > 0
+                        ? ` / ${formatBytes(evidence.progress.total)}`
+                        : ""}{" "}
+                      · one time
+                    </span>
+                  ) : evidence.preparing ? (
+                    <span data-testid="evidence-progress-detail">~40 MB · one time</span>
+                  ) : evidence.engine === "local" ? (
+                    "local · no data leaves this browser"
+                  ) : (
+                    "online · cloud engine"
+                  )}
                 </span>
               </div>
             </div>
