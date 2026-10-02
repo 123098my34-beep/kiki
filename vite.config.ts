@@ -13,14 +13,8 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
+    // transformers.js ships an onnxruntime WASM binary of ~27 MB; it is only
+    // fetched by the offline engine, never on first paint.
     chunkSizeWarningLimit: 4000,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          pdfvendor: ["pdf-lib", "pdfjs-dist"],
-          ocr: ["tesseract.js"],
-        },
-      },
-    },
   },
 });

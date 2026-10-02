@@ -1,22 +1,28 @@
+import { lazy, Suspense } from "react";
 import { Route, Routes } from "react-router-dom";
 import Landing from "./pages/Landing";
-import ToolPage from "./pages/ToolPage";
-import Research from "./pages/Research";
-import SelfTest from "./pages/SelfTest";
-import NotFound from "./pages/NotFound";
-import ScrollToTop from "./components/ScrollToTop";
+
+// Route-level code splitting: the landing (first paint) never waits on the
+// Studio's dictation UI, and the 404 loads only when hit.
+const Studio = lazy(() => import("./pages/Studio"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 export default function App() {
   return (
-    <div className="paper-grain selection-brass min-h-screen bg-ink-950 text-paper-100">
-      <ScrollToTop />
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-carbon-950">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-fog-500">
+            loading…
+          </span>
+        </div>
+      }
+    >
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/research" element={<Research />} />
-        <Route path="/self-test" element={<SelfTest />} />
-        <Route path="/:toolSlug" element={<ToolPage />} />
+        <Route path="/studio" element={<Studio />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
-    </div>
+    </Suspense>
   );
 }

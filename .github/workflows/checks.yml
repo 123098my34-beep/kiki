@@ -1,0 +1,56 @@
+name: checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+
+  unit:
+    name: unit + component (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run test
+
+  e2e:
+    name: e2e (playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun x playwright install --with-deps chromium
+      # CI builds and serves the real app rather than a dev server: the privacy
+      # test must observe the same bundle users get.
+      - run: bun run build
+      - name: Serve the production build
+        run: bunx --bun vite preview --host 127.0.0.1 --port 5173 --strictPort &
+      - name: Wait for the preview
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:5173 > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "preview never became ready" && exit 1
+      - name: E2E against the production build
+        run: bun run test:e2e
+        env:
+          E2E_BASE_URL: http://127.0.0.1:5173
