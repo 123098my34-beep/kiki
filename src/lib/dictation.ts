@@ -16,12 +16,23 @@ export interface DictationEvidence {
   /** live evidence of local processing: true while the session is active */
   evidenced: boolean;
   engine: ResolvedEngine;
+  /**
+   * The local model is being fetched/compiled and is NOT yet usable. This is
+   * distinct from `evidenced`: transformers.js resolves file metadata before
+   * emitting its first progress event, so there is a real window where the
+   * session is up but no bytes have been reported yet. Claiming "processing"
+   * during that window would be a lie, so the badge says "preparing".
+   */
+  preparing: boolean;
+  /** one-time model download in flight; null when idle or already cached */
+  progress: ModelProgress | null;
 }
 
 export interface DictationCallbacks {
   onState?: (state: DictationState) => void;
   onEngine?: (engine: ResolvedEngine) => void;
   onEvidence?: (evidence: DictationEvidence) => void;
+  onModelProgress?: (progress: ModelProgress) => void;
   onLevel?: (level: number) => void;
   onPartial?: (text: string) => void;
   onTranscript?: (raw: string, formatted: string, stats: DictationStats) => void;
@@ -34,6 +45,7 @@ import {
   resolveEngine,
   type AsrSession,
   type EnginePreference,
+  type ModelProgress,
   type ResolvedEngine,
 } from "./asr";
 import {
@@ -55,7 +67,12 @@ export class DictationEngine {
   raw = "";
   formatted = "";
   stats: DictationStats = { fillersRemoved: 0, commands: [] };
-  evidence: DictationEvidence = { evidenced: false, engine: "local" };
+  evidence: DictationEvidence = {
+    evidenced: false,
+    engine: "local",
+    preparing: false,
+    progress: null,
+  };
 
   constructor(private callbacks: DictationCallbacks = {}) {}
 
@@ -76,6 +93,10 @@ export class DictationEngine {
       engine = resolveEngine(preference);
       this.callbacks.onEngine?.(engine);
       this.evidence.engine = engine;
+      this.evidence.progress = null;
+      // A cold offline engine has to fetch ~40 MB before it can transcribe
+      // anything. Say so immediately rather than implying it already can.
+      this.evidence.preparing = engine === "local";
 
       // parallel mic meter feed (works for both engines)
       this.stream = await navigator.mediaDevices.getUserMedia({
@@ -106,6 +127,18 @@ export class DictationEngine {
           },
           onStatus: (msg) => this.callbacks.onStatus?.(msg),
           onError: (msg) => this.callbacks.onError?.(msg),
+          onModelProgress: (p) => {
+            this.evidence.progress = p.done ? null : p;
+            if (p.done) this.evidence.preparing = false;
+            this.callbacks.onEvidence?.({ ...this.evidence });
+            this.callbacks.onModelProgress?.(p);
+          },
+          onModelError: () => {
+            // Never leave the badge claiming a download that has stopped.
+            this.evidence.preparing = false;
+            this.evidence.progress = null;
+            this.callbacks.onEvidence?.({ ...this.evidence });
+          },
         },
       });
       await this.session.start();
@@ -141,6 +174,8 @@ export class DictationEngine {
     this.session?.stop();
     this.session = null;
     this.evidence.evidenced = false;
+    this.evidence.progress = null;
+    this.evidence.preparing = false;
     this.callbacks.onEvidence?.({ ...this.evidence });
     this.teardown();
     this.setState("idle");

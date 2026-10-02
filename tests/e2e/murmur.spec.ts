@@ -72,6 +72,35 @@ test.describe("studio", () => {
     await expect(page.getByText(/Offline is the default and always free/i)).toBeVisible();
   });
 
+  test("the badge admits it is not processing while the model fetch is blocked", async ({ page }) => {
+    // Hold the model host open. transformers.js resolves file metadata before
+    // it emits any progress event, so during this window the session is up but
+    // the engine genuinely cannot transcribe yet. The badge must say so.
+    await page.route(/(huggingface\.co|hf\.co|jsdelivr\.net)/, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30_000));
+    });
+
+    await page.goto("/studio");
+    await page.evaluate(() => {
+      Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: undefined });
+      Object.defineProperty(window, "webkitSpeechRecognition", { configurable: true, value: undefined });
+    });
+
+    const badge = page.getByTestId("evidence-badge");
+    await expect(badge).toContainText(/engine idle/i);
+
+    await page.getByLabel("Start dictation").click();
+
+    await expect(badge).toContainText(/preparing local model|downloading model/i, {
+      timeout: 15_000,
+    });
+    // the specific lie this test exists to prevent
+    await expect(badge).not.toContainText(/local processing active/i);
+    // bytes ARE leaving for the weights, so the privacy line must be hidden
+    await expect(badge).not.toContainText(/no data leaves this browser/i);
+    await expect(page.getByTestId("evidence-progress-detail")).toBeVisible();
+  });
+
   test("no audio or telemetry leaves the page while the offline engine runs", async ({ page }) => {
     const MODEL_HOSTS = /(^|\.)(huggingface\.co|hf\.co|jsdelivr\.net)$/;
     const external: { method: string; url: string }[] = [];

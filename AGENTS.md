@@ -13,6 +13,7 @@ Keyword-activated skills live in `skills/icm/` (nested under the ICM skill folde
 
 - The trigger matches only when the prompt **begins** with the keyword (case-insensitive), immediately followed by whitespace, punctuation, or nothing.
 - On a match, read the corresponding skill file from `skills/icm/` and apply its guidance for the whole turn. Act as an expert in that repo: use its terminology, commands, conventions, and known pitfalls.
+- **Pairing rule (user instruction, 2026-10-02):** `azr` is always applied **together with** `hrm`. When the prompt starts with `azr`, load **both** `skills/icm/azr/SKILL.md` and `skills/icm/hrm/SKILL.md` for that turn. AZR supplies the PROPOSE/SOLVE self-play framing for the work; HRM supplies the hierarchical multi-timescale framing for how it is executed (slow planning module, many fast detail steps, adaptive stopping). `azr` alone is never sufficient.
 - If the request falls outside the skill's scope, still apply the skill where relevant and answer the rest normally.
 - No trigger keyword → behave normally, do not load any skill.
 - `hrm` inside a sentence that does not start the prompt (e.g. "fix the hrm bug later") still counts as a match since the prompt starts with it — but a prompt that merely *mentions* HRM mid-sentence does not activate the skill.

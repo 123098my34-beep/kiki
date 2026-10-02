@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Studio from "../../src/pages/Studio";
 
 /** Captured callbacks of the last constructed DictationEngine. */
 type Callbacks = {
-  onEvidence?: (e: { evidenced: boolean; engine: "local" | "browser" }) => void;
+  onEvidence?: (e: {
+    evidenced: boolean;
+    engine: "local" | "browser";
+    preparing: boolean;
+    progress: { loaded: number; total: number; percent: number | null; done: boolean } | null;
+  }) => void;
 };
 
 const engineLog: {
@@ -28,12 +33,14 @@ vi.mock("../../src/lib/dictation", () => ({
       this.cb.onEvidence?.({
         evidenced: true,
         engine: preference === "browser" ? "browser" : "local",
+        preparing: preference !== "browser",
+        progress: null,
       });
     }
     stop() {
       engineLog.stopped += 1;
       this.isRunning = false;
-      this.cb.onEvidence?.({ evidenced: false, engine: "local" });
+      this.cb.onEvidence?.({ evidenced: false, engine: "local", preparing: false, progress: null });
     }
   },
 }));
@@ -134,18 +141,93 @@ describe("Studio — on-device activity indicator", () => {
 
   it("shows an idle badge that flips live while the engine runs", async () => {
     renderStudio();
+    // cloud engine: no model fetch, so "processing" is the honest label
+    fireEvent.click(screen.getByText(/Browser — fast, online/i).closest("button")!);
     const badge = screen.getByTestId("evidence-badge");
 
+    // the badge reports the engine of the *last session*, so it still reads
+    // local until this session actually resolves
     expect(badge).toHaveTextContent(/engine idle/i);
-    expect(badge).toHaveTextContent(/no data leaves this browser/i);
+    expect(badge).toHaveTextContent(/local · no data leaves this browser/i);
 
     fireEvent.click(screen.getByLabelText("Start dictation"));
     expect(badge).toHaveTextContent(/local processing active/i);
+    expect(badge).toHaveTextContent(/online · cloud engine/i);
 
     fireEvent.click(await screen.findByLabelText("Stop dictation"));
     expect(badge).toHaveTextContent(/engine idle/i);
     expect(engineLog.started).toBe(1);
     expect(engineLog.stopped).toBe(1);
+  });
+
+  it("says 'preparing' rather than 'processing' during the cold model fetch", async () => {
+    renderStudio();
+    fireEvent.click(screen.getByLabelText("Start dictation"));
+    await screen.findByLabelText("Stop dictation");
+
+    const badge = screen.getByTestId("evidence-badge");
+    // the mock engine reports preparing=true for the offline engine
+    expect(badge).toHaveTextContent(/preparing local model/i);
+    expect(badge).not.toHaveTextContent(/local processing active/i);
+    expect(screen.getByTestId("evidence-progress-detail")).toHaveTextContent(
+      /~40 MB · one time/i
+    );
+    // bytes are leaving the browser for the weights, so do not claim otherwise
+    expect(badge).not.toHaveTextContent(/no data leaves this browser/i);
+  });
+
+  it("shows real download progress instead of claiming it is processing", async () => {
+    renderStudio();
+    fireEvent.click(screen.getByLabelText("Start dictation"));
+    await screen.findByLabelText("Stop dictation");
+
+    const badge = screen.getByTestId("evidence-badge");
+
+    act(() => {
+      lastCallbacks.onEvidence?.({
+        evidenced: true,
+        engine: "local",
+        preparing: true,
+        progress: { loaded: 5_242_880, total: 41_943_040, percent: 13, done: false },
+      });
+    });
+
+    expect(badge).toHaveTextContent(/downloading model · 13%/i);
+    expect(badge).toHaveTextContent(/5\.0 MB \/ 40\.0 MB · one time/i);
+    expect(badge).not.toHaveTextContent(/no data leaves this browser/i);
+
+    act(() => {
+      lastCallbacks.onEvidence?.({
+        evidenced: true,
+        engine: "local",
+        preparing: false,
+        progress: null,
+      });
+    });
+    expect(badge).toHaveTextContent(/local processing active/i);
+    expect(badge).toHaveTextContent(/no data leaves this browser/i);
+  });
+
+  it("says 'downloading' without a percentage while the total is unknown", async () => {
+    renderStudio();
+    fireEvent.click(screen.getByLabelText("Start dictation"));
+    await screen.findByLabelText("Stop dictation");
+
+    act(() => {
+      lastCallbacks.onEvidence?.({
+        evidenced: true,
+        engine: "local",
+        preparing: true,
+        progress: { loaded: 1_000_000, total: 0, percent: null, done: false },
+      });
+    });
+    const badge = screen.getByTestId("evidence-badge");
+    expect(badge).toHaveTextContent(/downloading model/i);
+    // no fabricated percentage while the total is unknown
+    expect(badge).not.toHaveTextContent(/\d+%/i);
+    expect(screen.getByTestId("evidence-progress-detail")).toHaveTextContent(
+      "1.0 MB · one time"
+    );
   });
 
   it("keeps the badge honest about the cloud engine when it is picked", async () => {
@@ -156,6 +238,7 @@ describe("Studio — on-device activity indicator", () => {
     const badge = screen.getByTestId("evidence-badge");
     expect(await screen.findByLabelText("Stop dictation")).toBeInTheDocument();
     expect(badge).toHaveTextContent(/local processing active/i);
+    expect(badge).not.toHaveTextContent(/preparing/i);
     expect(badge).toHaveTextContent(/online · cloud engine/i);
   });
 

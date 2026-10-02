@@ -60,10 +60,29 @@ Format: `### CARD-<n> — <status>` · status ∈ open / proposed / solving / ve
   leaves the page while the offline engine runs" proves egress is model-weights
   only. Full suite 53 unit/component + 11 e2e green — see `tests/QA-REPORT.md`.
 
-### CARD-007 — proposed
+### CARD-007 — solved (progress half); escape hatch still open
 - **Signal:** with offline now the default, first dictation stalls ~40 MB of
   model download on a cold cache with no progress affordance.
 - **Promise:** P1, P3.
 - **Propose:** surface download progress on the evidence badge (bytes / percent)
   and offer a "use browser engine meanwhile" escape hatch.
-- **Human gate:** copy and whether to keep the browser engine free-by-default.
+- **Solve (progress):** `ModelProgress` + `onModelProgress`/`onModelError` in
+  `src/lib/asr.ts`, fed by transformers.js `progress_callback` (the aggregate
+  `progress_total` event, not per-file — files download in parallel and per-file
+  events clobber each other). Threaded through `DictationEvidence` and rendered
+  by the badge as `downloading model · N%` + `X MB / Y MB · one time`.
+- **Solve (the lie this uncovered):** transformers.js awaits `get_file_metadata`
+  *before* emitting its first progress event. So on a cold cache the badge
+  claimed `local processing active` and `local · no data leaves this browser`
+  while ~40 MB was in flight — exactly the two things the badge exists to
+  promise. Added `evidence.preparing`, set whenever a local session starts and
+  cleared on `ready`/error, rendering `preparing local model` and hiding the
+  privacy line until weights are actually in hand.
+- **Verify:** e2e "the badge admits it is not processing while the model fetch is
+  blocked" holds the model host open and asserts the badge never says
+  `local processing active` — **confirmed failing against the pre-fix code**
+  (it rendered `local processing activelocal · no data leaves this browser`), so
+  it is a real regression guard, not a tautology. 59 unit/component + 12 e2e
+  green — see `tests/QA-REPORT.md`.
+- **Still open:** no "use the browser engine meanwhile" escape hatch during the
+  fetch. Human gate on whether to add one.

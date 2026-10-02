@@ -68,7 +68,7 @@ const TRANSPARENCY = [
   {
     icon: ShieldCheck,
     name: "Offline engine (default, free)",
-    body: "Audio goes into an ONNX model running in this tab and comes out as text. After the one-time ~40 MB model download, transcription touches the network zero times — the Studio shows a live indicator while it runs, and our E2E suite asserts nothing leaves the page. Airplane mode approved.",
+    body: "Audio goes into an ONNX model running in this tab and comes out as text. The one-time ~40 MB model download is shown byte-by-byte on the Studio's activity badge — which reports “preparing”, “downloading 47%” and “local processing” as distinct states rather than claiming it is done. After that first fetch, transcription touches the network zero times, and our E2E suite asserts nothing leaves the page. Airplane mode approved.",
     tag: "nothing leaves",
   },
   {
@@ -181,7 +181,7 @@ const FAQ = [
   },
   {
     q: "Does it actually work without internet?",
-    a: "Yes, after a one-time model download (~40 MB). The offline engine is the default: it loads Whisper-tiny via ONNX and transcribes entirely in your browser tab. The Studio shows a live indicator while that processing happens, and our test suite asserts no audio or telemetry request leaves the page. The optional browser engine needs the vendor's online speech service.",
+    a: "Yes, after a one-time model download (~40 MB), with the progress shown on the Studio badge. The offline engine is the default: it loads Whisper-tiny via ONNX and transcribes entirely in your browser tab. Our test suite asserts no audio or telemetry request leaves the page. The optional browser engine needs the vendor's online speech service.",
   },
   {
     q: "What about a desktop app?",
