@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   activateLicense,
   getLicense,
+  gumroadConfig,
+  gumroadReady,
   isPro,
   paddleConfig,
   paddleReady,
@@ -76,5 +78,17 @@ describe("billing — paddle readiness", () => {
     if (paddleReady()) return; // keys present in this environment — covered by e2e
     expect(await upgradeToPro()).toBe("unconfigured");
     expect(isPro()).toBe(false); // never self-grants
+  });
+});
+
+describe("billing — the Gumroad buy link", () => {
+  it("always resolves to a real absolute URL", () => {
+    // The production pipeline rewrote the env-supplied URL into a tracking
+    // token that the static host could not resolve, so the buy button silently
+    // pointed back at the landing page. Anything that is not an https URL is
+    // ignored in favour of the canonical listing in source.
+    expect(gumroadReady()).toBe(true);
+    expect(gumroadConfig.productUrl).toMatch(/^https:\/\//);
+    expect(gumroadConfig.productUrl).toContain("gumroad.com");
   });
 });
